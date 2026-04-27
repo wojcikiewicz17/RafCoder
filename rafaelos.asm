@@ -21,6 +21,8 @@ section .rodata
     C_ZERO       dq 0x0000000000000000  ; 0.0
     C_PHI        dq 0x3FF9E3779B97F4A8  ; φ
     C_SQRT3_2    dq 0x3FEBB67AE8584CCA  ; √3/2
+    C_THR_LOW    dq 0x3FB999999999999A  ; 0.1
+    C_THR_HIGH   dq 0x3FD3333333333333  ; 0.3
 
     FNV_PRIME    dq 0x00000100000001B3
     FNV_BASIS    dq 0xCBF29CE484222325
@@ -32,6 +34,14 @@ section .rodata
     msg_step     db "STEP t=", 0
     msg_phi      db "PHI:   ", 0
     msg_newline  db 10, 0
+    msg_group_hdr db "GROUP SUMMARY (phi buckets)", 10
+    msg_group_hdr_len equ $ - msg_group_hdr
+    msg_grp_low  db "LOW  [0.0000..0.1000): "
+    msg_grp_low_len equ $ - msg_grp_low
+    msg_grp_mid  db "MID  [0.1000..0.3000): "
+    msg_grp_mid_len equ $ - msg_grp_mid
+    msg_grp_high db "HIGH [0.3000..1.0000): "
+    msg_grp_high_len equ $ - msg_grp_high
 
 section .bss
     align 16
@@ -47,6 +57,9 @@ section .bss
     phi_val      resq 1
     step_count   resq 1
     num_buf      resb 32
+    group_low    resq 1
+    group_mid    resq 1
+    group_high   resq 1
 
 section .text
     global _start
@@ -61,6 +74,9 @@ _start:
     syscall
 
     mov     qword [step_count], 0
+    mov     qword [group_low], 0
+    mov     qword [group_mid], 0
+    mov     qword [group_high], 0
 
 .main_loop:
     cmp     qword [step_count], 42
@@ -70,12 +86,14 @@ _start:
     call    generate_input
     call    state_update
     call    calc_phi
+    call    classify_phi
     call    print_step
 
     inc     qword [step_count]
     jmp     .main_loop
 
 .done:
+    call    print_group_summary
     mov     rax, SYS_EXIT
     xor     rdi, rdi
     syscall
@@ -273,6 +291,86 @@ calc_phi:
     movsd   xmm0, xmm6
     mulsd   xmm0, xmm6
     movsd   [phi_val], xmm0
+    ret
+
+classify_phi:
+    movsd   xmm0, [phi_val]
+    ucomisd xmm0, [C_THR_LOW]
+    jb      .low
+    ucomisd xmm0, [C_THR_HIGH]
+    jb      .mid
+    inc     qword [group_high]
+    ret
+.low:
+    inc     qword [group_low]
+    ret
+.mid:
+    inc     qword [group_mid]
+    ret
+
+print_group_summary:
+    mov     rdi, STDOUT
+    mov     rsi, msg_group_hdr
+    mov     rdx, msg_group_hdr_len
+    mov     rax, SYS_WRITE
+    syscall
+
+    mov     rdi, STDOUT
+    mov     rsi, msg_grp_low
+    mov     rdx, msg_grp_low_len
+    mov     rax, SYS_WRITE
+    syscall
+    mov     rdi, [group_low]
+    lea     rsi, [num_buf]
+    call    u64_to_dec
+    mov     rdi, STDOUT
+    lea     rsi, [num_buf]
+    mov     rdx, rax
+    mov     rax, SYS_WRITE
+    syscall
+    mov     rdi, STDOUT
+    mov     rsi, msg_newline
+    mov     rdx, 1
+    mov     rax, SYS_WRITE
+    syscall
+
+    mov     rdi, STDOUT
+    mov     rsi, msg_grp_mid
+    mov     rdx, msg_grp_mid_len
+    mov     rax, SYS_WRITE
+    syscall
+    mov     rdi, [group_mid]
+    lea     rsi, [num_buf]
+    call    u64_to_dec
+    mov     rdi, STDOUT
+    lea     rsi, [num_buf]
+    mov     rdx, rax
+    mov     rax, SYS_WRITE
+    syscall
+    mov     rdi, STDOUT
+    mov     rsi, msg_newline
+    mov     rdx, 1
+    mov     rax, SYS_WRITE
+    syscall
+
+    mov     rdi, STDOUT
+    mov     rsi, msg_grp_high
+    mov     rdx, msg_grp_high_len
+    mov     rax, SYS_WRITE
+    syscall
+    mov     rdi, [group_high]
+    lea     rsi, [num_buf]
+    call    u64_to_dec
+    mov     rdi, STDOUT
+    lea     rsi, [num_buf]
+    mov     rdx, rax
+    mov     rax, SYS_WRITE
+    syscall
+    mov     rdi, STDOUT
+    mov     rsi, msg_newline
+    mov     rdx, 1
+    mov     rax, SYS_WRITE
+    syscall
     ret
 
 print_step:
