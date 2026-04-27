@@ -68,6 +68,8 @@ Before proceeding, you'll need to install the necessary dependencies. You can do
 ```
 pip install -r requirements.txt
 ```
+A lightweight toroidal benchmark utility for 40-sector grouping is also available at `tools/cron_fidelity_grouping.py`, with usage notes in `docs/cron_fidelity_groups.md`.
+
 A demo is also available on the [🤗 Hugging Face Space](https://huggingface.co/spaces/deepseek-ai/deepseek-coder-33b-instruct), and you can run the demo locally using `app.py` in the [demo](https://github.com/deepseek-ai/deepseek-coder/tree/main/demo) folder.  (Thanks to all the HF team for their support)
 
 Here are some examples of how to use our model.
