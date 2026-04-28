@@ -32,6 +32,22 @@ android {
         !releaseKeyAlias.isNullOrBlank() &&
         !releaseKeyPassword.isNullOrBlank()
 
+    val keystorePathEnv = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull
+    val keystorePasswordEnv = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull
+    val keyAliasEnv = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
+    val keyPasswordEnv = providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull
+    val hasCompleteSigningEnv = !keystorePathEnv.isNullOrBlank() &&
+        !keystorePasswordEnv.isNullOrBlank() &&
+        !keyAliasEnv.isNullOrBlank() &&
+        !keyPasswordEnv.isNullOrBlank()
+
+    if (!keystorePathEnv.isNullOrBlank() && !hasCompleteSigningEnv) {
+        throw GradleException(
+            "ANDROID_KEYSTORE_PATH is set, but release signing env is incomplete. " +
+                "Expected ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD."
+        )
+    }
+
     defaultConfig {
         applicationId = "com.rafcoder.app"
         minSdk = 24
@@ -53,10 +69,10 @@ android {
     signingConfigs {
         create("release") {
             if (hasCompleteSigningEnv) {
-                storeFile = file(androidKeystorePath!!)
-                storePassword = androidKeystorePassword
-                keyAlias = androidKeyAlias
-                keyPassword = androidKeyPassword
+                storeFile = file(keystorePathEnv!!)
+                storePassword = keystorePasswordEnv
+                this.keyAlias = keyAliasEnv
+                keyPassword = keyPasswordEnv
             }
         }
     }
