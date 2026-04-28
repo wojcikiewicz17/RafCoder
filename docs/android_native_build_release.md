@@ -3,7 +3,7 @@
 ## Source of truth
 - Android project root: `android/`
 - Native core: `android/app/src/main/cpp/native-lib.cpp`
-- ABI targets (official release matrix): `armeabi-v7a`, `arm64-v8a`
+- ABI targets: `armeabi-v7a`, `arm64-v8a`, `x86_64`
 - CI workflow: `.github/workflows/android-native-ci.yml`
 
 ## Local build

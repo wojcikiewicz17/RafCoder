@@ -23,15 +23,6 @@ if (!androidKeystorePath.isNullOrBlank() && !hasCompleteSigningEnv) {
 android {
     namespace = "com.rafcoder.app"
     compileSdk = 35
-    val releaseKeystorePath = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull
-    val releaseKeystorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull
-    val releaseKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
-    val releaseKeyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull
-    val hasCompleteSigningEnv = !releaseKeystorePath.isNullOrBlank() &&
-        !releaseKeystorePassword.isNullOrBlank() &&
-        !releaseKeyAlias.isNullOrBlank() &&
-        !releaseKeyPassword.isNullOrBlank()
-
     val keystorePathEnv = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull
     val keystorePasswordEnv = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull
     val keyAliasEnv = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
@@ -56,7 +47,7 @@ android {
         versionName = "1.0.0"
 
         ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
         }
 
         externalNativeBuild {

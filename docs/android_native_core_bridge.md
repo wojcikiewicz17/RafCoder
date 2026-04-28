@@ -9,7 +9,7 @@ A camada Android possuía um `native-lib.cpp` funcional apenas como prova de car
 A função nativa retornava uma mensagem fixa:
 
 ```cpp
-RafCoder Native Core OK (armeabi-v7a + arm64-v8a)
+RafCoder Native Core OK (armeabi-v7a + arm64-v8a + x86_64)
 ```
 
 Isso provava que a biblioteca nativa carregava, mas ainda não executava o núcleo `core/sector.c`.
@@ -79,7 +79,7 @@ A primeira integração foi feita de forma conservadora:
 - sem alterar ainda a ABI pública de `core/sector.h`;
 - sem trocar a estrutura do app Android;
 - sem exigir assinatura para APK release unsigned;
-- preservando compatibilidade com `armeabi-v7a` e `arm64-v8a`.
+- preservando compatibilidade com `armeabi-v7a`, `arm64-v8a` e `x86_64` no emulador.
 
 ## Gaps restantes
 
