@@ -6,6 +6,14 @@ plugins {
 android {
     namespace = "com.rafcoder.app"
     compileSdk = 35
+    val releaseKeystorePath = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull
+    val releaseKeystorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull
+    val releaseKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
+    val releaseKeyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull
+    val hasCompleteSigningEnv = !releaseKeystorePath.isNullOrBlank() &&
+        !releaseKeystorePassword.isNullOrBlank() &&
+        !releaseKeyAlias.isNullOrBlank() &&
+        !releaseKeyPassword.isNullOrBlank()
 
     defaultConfig {
         applicationId = "com.rafcoder.app"
@@ -27,15 +35,11 @@ android {
 
     signingConfigs {
         create("release") {
-            val storeFilePath = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull
-            val storePass = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull
-            val keyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
-            val keyPass = providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull
-            if (!storeFilePath.isNullOrBlank() && !storePass.isNullOrBlank() && !keyAlias.isNullOrBlank() && !keyPass.isNullOrBlank()) {
-                storeFile = file(storeFilePath)
-                storePassword = storePass
-                this.keyAlias = keyAlias
-                keyPassword = keyPass
+            if (hasCompleteSigningEnv) {
+                storeFile = file(releaseKeystorePath!!)
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
             }
         }
     }
@@ -50,8 +54,15 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            if (providers.environmentVariable("ANDROID_KEYSTORE_PATH").isPresent) {
+            if (hasCompleteSigningEnv) {
                 signingConfig = signingConfigs.getByName("release")
+            } else {
+                logger.warn(
+                    "Release signing disabled: missing required env vars " +
+                        "(ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD). " +
+                        "Building explicit unsigned release artifact."
+                )
+                signingConfig = null
             }
         }
     }
