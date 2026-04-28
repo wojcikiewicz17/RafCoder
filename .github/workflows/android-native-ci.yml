@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       JAVA_VERSION: '17'
+      HAS_SIGNING_SECRETS: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,29 +29,47 @@ jobs:
         with:
           gradle-version: 8.14.3
 
-      - name: Build unsigned debug and release
+      - name: Build unsigned debug
         run: |
-          gradle -p android --no-daemon clean :app:assembleDebug :app:assembleRelease
+          gradle -p android --no-daemon :app:assembleDebug
+
+      - name: Stage unsigned APK artifacts
+        run: |
+          mkdir -p android/artifacts/unsigned
+          cp -v android/app/build/outputs/apk/debug/*.apk android/artifacts/unsigned/
 
       - name: Decode keystore
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/android/release.keystore
 
       - name: Build signed release
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
         env:
           ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/android/release.keystore
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          gradle -p android --no-daemon :app:assembleRelease
+          gradle -p android --no-daemon :app:clean :app:assembleRelease
 
-      - name: Upload APK artifacts
+      - name: Stage signed APK artifacts
+        if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
+        run: |
+          mkdir -p android/artifacts/signed
+          cp -v android/app/build/outputs/apk/release/*.apk android/artifacts/signed/
+
+      - name: Upload unsigned APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: rafcoder-android-apks
+          name: rafcoder-android-apks-unsigned
           path: |
-            android/app/build/outputs/apk/debug/*.apk
-            android/app/build/outputs/apk/release/*.apk
+            android/artifacts/unsigned/*.apk
+
+      - name: Upload signed APK artifacts
+        if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rafcoder-android-apks-signed
+          path: |
+            android/artifacts/signed/*.apk
