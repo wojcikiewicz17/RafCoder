@@ -3,7 +3,8 @@
 ## Source of truth
 - Android project root: `android/`
 - Native core: `android/app/src/main/cpp/native-lib.cpp`
-- ABI targets: `armeabi-v7a`, `arm64-v8a`
+- ABI matrix oficial (Gradle `ndk.abiFilters` + CMake): `armeabi-v7a`, `arm64-v8a`
+- `x86_64` não é empacotado na trilha oficial (release/CI)
 - CI workflow: `.github/workflows/android-native-ci.yml`
 
 ## Local build
