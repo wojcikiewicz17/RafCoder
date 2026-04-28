@@ -24,26 +24,33 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Setup Gradle
+      - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.14.3
 
-      - name: Build unsigned debug
+      - name: Bootstrap Gradle wrapper jar
         run: |
-          gradle -p android --no-daemon :app:assembleDebug
+          mkdir -p android/gradle/wrapper
+          if [ ! -f android/gradle/wrapper/gradle-wrapper.jar ]; then
+            curl -fsSL https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradle/wrapper/gradle-wrapper.jar -o android/gradle/wrapper/gradle-wrapper.jar
+          fi
+
+      - name: Build unsigned binaries (debug + release)
+        run: |
+          ./android/gradlew -p android --no-daemon clean :app:assembleDebug :app:assembleRelease
 
       - name: Stage unsigned APK artifacts
         run: |
           mkdir -p android/artifacts/unsigned
           cp -v android/app/build/outputs/apk/debug/*.apk android/artifacts/unsigned/
+          cp -v android/app/build/outputs/apk/release/*unsigned*.apk android/artifacts/unsigned/
+          ls -lah android/artifacts/unsigned
 
       - name: Decode keystore
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/android/release.keystore
 
-      - name: Build signed release
+      - name: Build signed release binary
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
         env:
           ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/android/release.keystore
@@ -51,13 +58,14 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          gradle -p android --no-daemon :app:clean :app:assembleRelease
+          ./android/gradlew -p android --no-daemon :app:clean :app:assembleRelease
 
       - name: Stage signed APK artifacts
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
         run: |
           mkdir -p android/artifacts/signed
-          cp -v android/app/build/outputs/apk/release/*.apk android/artifacts/signed/
+          cp -v android/app/build/outputs/apk/release/*release*.apk android/artifacts/signed/
+          ls -lah android/artifacts/signed
 
       - name: Upload unsigned APK artifacts
         uses: actions/upload-artifact@v4

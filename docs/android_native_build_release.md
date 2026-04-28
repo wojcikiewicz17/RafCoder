@@ -5,9 +5,10 @@
 - Native core: `android/app/src/main/cpp/native-lib.cpp`
 - ABI targets: `armeabi-v7a`, `arm64-v8a`
 - CI workflow: `.github/workflows/android-native-ci.yml`
+- Official build tool entrypoint: `android/gradlew` (`android/gradlew.bat` on Windows)
 
 ## Local build
-Pré-requisito: Gradle disponível no PATH local.
+Pré-requisito: Java/JDK compatível (Gradle é resolvido via wrapper do projeto).
 
 ```bash
 ./scripts/android_build_matrix.sh
