@@ -13,10 +13,6 @@ if(ANDROID_ABI STREQUAL "arm64-v8a")
     list(APPEND RAFCODER_NATIVE_SOURCES
         "${RAFCODER_ROOT}/core/arch/aarch64/primitives.S"
     )
-elseif(ANDROID_ABI STREQUAL "x86_64")
-    list(APPEND RAFCODER_NATIVE_SOURCES
-        "${RAFCODER_ROOT}/core/arch/x86_64/primitives.S"
-    )
 endif()
 
 add_library(rafcoder_native SHARED ${RAFCODER_NATIVE_SOURCES})

@@ -3,7 +3,7 @@
 ## Source of truth
 - Android project root: `android/`
 - Native core: `android/app/src/main/cpp/native-lib.cpp`
-- ABI targets: `armeabi-v7a`, `arm64-v8a`
+- ABI targets (official release matrix): `armeabi-v7a`, `arm64-v8a`
 - CI workflow: `.github/workflows/android-native-ci.yml`
 
 ## Local build
@@ -31,3 +31,9 @@ export ANDROID_KEY_PASSWORD='***'
 - `ANDROID_KEY_PASSWORD`
 
 Without these secrets CI still produces unsigned debug/release APKs.
+
+
+## ABI/CMake alignment
+- `ndk.abiFilters` in `android/app/build.gradle.kts` is the single source of truth for packaged ABIs: `armeabi-v7a`, `arm64-v8a`.
+- `android/app/src/main/cpp/CMakeLists.txt` includes architecture-specific assembly only for `arm64-v8a`; `armeabi-v7a` uses the portable C fallback (`core/arch/primitives.c`).
+- `x86_64` is intentionally not part of the official matrix and is not included in Gradle packaging or native source selection.
