@@ -245,3 +245,17 @@ RafCoder-specific additions focus on native runtime research, RAFAELOS low-level
   url = {https://arxiv.org/abs/2401.14196}
 }
 ```
+
+## Instalação de ZIP da raiz
+
+Use o script abaixo para decodificar/descompactar automaticamente o único `.zip` presente na raiz do repositório e instalar no projeto:
+
+```bash
+./scripts/install_root_zip.sh
+```
+
+Opcionalmente, informe um diretório de destino:
+
+```bash
+./scripts/install_root_zip.sh android/
+```

@@ -7,20 +7,16 @@
 #define FNV_OFFSET_BASIS 0xCBF29CE484222325ULL
 #define FNV_PRIME 0x100000001B3ULL
 
-static uint8_t payload[CORE_PAYLOAD_SIZE];
-
 typedef struct scratch_state {
     uint32_t unique_marks[8];
     uint32_t spread_milli;
 } scratch_state;
 
-static scratch_state scratch;
-
 static uint32_t u32_min(uint32_t a, uint32_t b) {
     return (a < b) ? a : b;
 }
 
-static uint32_t entropy_milli(const uint8_t* data, uint32_t len) {
+static uint32_t entropy_milli(const uint8_t* data, uint32_t len, scratch_state* scratch) {
     uint32_t i;
     uint32_t unique = 0u;
     uint32_t transitions = 0u;
@@ -33,15 +29,15 @@ static uint32_t entropy_milli(const uint8_t* data, uint32_t len) {
     }
 
     for (i = 0u; i < 8u; ++i) {
-        scratch.unique_marks[i] = 0u;
+        scratch->unique_marks[i] = 0u;
     }
 
     for (i = 0u; i < len; ++i) {
         uint8_t b = core_load_u8(data + i);
         uint32_t slot = ((uint32_t)b) >> 5u;
         uint32_t bit = 1u << (((uint32_t)b) & 31u);
-        if ((scratch.unique_marks[slot] & bit) == 0u) {
-            scratch.unique_marks[slot] |= bit;
+        if ((scratch->unique_marks[slot] & bit) == 0u) {
+            scratch->unique_marks[slot] |= bit;
             unique += 1u;
         }
         if (i > 0u) {
@@ -70,7 +66,7 @@ static uint64_t fnv_step(uint64_t h, uint8_t byte) {
     return core_mul_u64(mixed, FNV_PRIME);
 }
 
-static uint32_t geometric_invariant(uint32_t entropy_q16, uint32_t coherence_q16, const uint8_t* data, uint32_t len) {
+static uint32_t geometric_invariant(uint32_t entropy_q16, uint32_t coherence_q16, const uint8_t* data, uint32_t len, scratch_state* scratch) {
     uint32_t i;
     uint32_t spread_sum = 0u;
     uint32_t phi_milli;
@@ -86,7 +82,7 @@ static uint32_t geometric_invariant(uint32_t entropy_q16, uint32_t coherence_q16
     }
 
     spread_milli = (spread_sum * 1000u) / (len * 255u);
-    scratch.spread_milli = spread_milli;
+    scratch->spread_milli = spread_milli;
 
     {
         uint32_t one_minus_h_milli = ((Q16_ONE - entropy_q16) * 1000u) / Q16_ONE;
@@ -123,10 +119,14 @@ void run_sector(struct state* s, uint32_t iterations) {
     uint32_t i;
     uint32_t j;
     uint64_t rng;
+    uint8_t payload[CORE_PAYLOAD_SIZE];
+    scratch_state scratch;
 
     if (s == (void*)0) {
         return;
     }
+
+    scratch.spread_milli = 0u;
 
     if (s->hash64 == 0ULL) {
         s->hash64 = FNV_OFFSET_BASIS;
@@ -146,7 +146,7 @@ void run_sector(struct state* s, uint32_t iterations) {
             core_store_u8(payload + j, (uint8_t)(rng & 0xFFu));
         }
 
-        s->last_entropy_milli = entropy_milli(payload, CORE_PAYLOAD_SIZE);
+        s->last_entropy_milli = entropy_milli(payload, CORE_PAYLOAD_SIZE, &scratch);
 
         for (j = 0u; j < CORE_PAYLOAD_SIZE; ++j) {
             s->hash64 = fnv_step(s->hash64, core_load_u8(payload + j));
@@ -160,7 +160,7 @@ void run_sector(struct state* s, uint32_t iterations) {
             coherence_update(&s->coherence_q16, c_in_q16, &s->entropy_q16, h_in_q16);
         }
 
-        s->last_invariant_milli = geometric_invariant(s->entropy_q16, s->coherence_q16, payload, CORE_PAYLOAD_SIZE);
+        s->last_invariant_milli = geometric_invariant(s->entropy_q16, s->coherence_q16, payload, CORE_PAYLOAD_SIZE, &scratch);
     }
 
     s->output_words = CORE_OUTPUT_WORDS;

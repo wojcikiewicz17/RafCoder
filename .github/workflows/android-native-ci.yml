@@ -33,10 +33,28 @@ jobs:
         run: |
           gradle -p android --no-daemon :app:assembleDebug
 
-      - name: Stage unsigned APK artifacts
+      - name: Build unsigned release
         run: |
-          mkdir -p android/artifacts/unsigned
-          cp -v android/app/build/outputs/apk/debug/*.apk android/artifacts/unsigned/
+          gradle -p android --no-daemon :app:assembleRelease
+
+      - name: Stage unsigned debug APK artifacts
+        run: |
+          mkdir -p android/artifacts/debug
+          cp -v android/app/build/outputs/apk/debug/*.apk android/artifacts/debug/
+
+      - name: Stage unsigned release APK artifacts
+        run: |
+          mkdir -p android/artifacts/unsigned-release
+          cp -v android/app/build/outputs/apk/release/*.apk android/artifacts/unsigned-release/
+
+      - name: Build unsigned release
+        run: |
+          gradle -p android --no-daemon :app:assembleRelease
+
+      - name: Collect unsigned release APKs
+        run: |
+          mkdir -p android/artifacts/unsigned-release
+          cp android/app/build/outputs/apk/release/*.apk android/artifacts/unsigned-release/
 
       - name: Decode keystore
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
@@ -56,20 +74,36 @@ jobs:
       - name: Stage signed APK artifacts
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
         run: |
-          mkdir -p android/artifacts/signed
-          cp -v android/app/build/outputs/apk/release/*.apk android/artifacts/signed/
+          mkdir -p android/artifacts/signed-release
+          cp -v android/app/build/outputs/apk/release/*.apk android/artifacts/signed-release/
 
-      - name: Upload unsigned APK artifacts
+      - name: Verify signed release certificates
+        if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n1)
+          for apk in android/artifacts/signed-release/*.apk; do
+            echo "Validating signature for $apk"
+            "$APKSIGNER" verify --print-certs "$apk"
+          done
+
+      - name: Upload debug APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: rafcoder-android-apks-unsigned
+          name: rafcoder-apk-debug
           path: |
-            android/artifacts/unsigned/*.apk
+            android/artifacts/debug/*.apk
 
-      - name: Upload signed APK artifacts
+      - name: Upload unsigned release APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rafcoder-apk-release-unsigned
+          path: |
+            android/artifacts/unsigned-release/*.apk
+
+      - name: Upload signed release APK artifacts
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: rafcoder-android-apks-signed
+          name: rafcoder-apk-release-signed
           path: |
-            android/artifacts/signed/*.apk
+            android/artifacts/signed-release/*.apk

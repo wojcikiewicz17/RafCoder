@@ -26,7 +26,10 @@ libsector_core.a: $(OBJ)
 %.o: %.S
 	$(CC) $(CFLAGS) -I. -c $< -o $@
 
-clean:
-	rm -f $(OBJ) libsector_core.a
+test_reentrancy: test_sector_reentrancy.c $(SRC)
+	$(CC) -O2 -Wall -Wextra -Werror -std=c11 -I. test_sector_reentrancy.c $(SRC) -pthread -o $@
 
-.PHONY: all clean
+clean:
+	rm -f $(OBJ) libsector_core.a test_reentrancy
+
+.PHONY: all clean test_reentrancy
