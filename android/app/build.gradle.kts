@@ -13,7 +13,7 @@ val hasSigningEnv = !androidKeystorePath.isNullOrBlank() &&
     !androidKeyAlias.isNullOrBlank() &&
     !androidKeyPassword.isNullOrBlank()
 
-val hasValidKeystoreFile = hasSigningEnv && file(androidKeystorePath!!).exists()
+val hasValidKeystoreFile = !androidKeystorePath.isNullOrBlank() && file(androidKeystorePath).exists()
 
 android {
     namespace = "com.rafcoder.app"
@@ -39,7 +39,13 @@ android {
 
     signingConfigs {
         create("release") {
-            if (hasSigningEnv && hasValidKeystoreFile) {
+            if (hasSigningEnv) {
+                if (!hasValidKeystoreFile) {
+                    throw GradleException(
+                        "Release signed requested via signing env vars, but keystore file was not found at: " +
+                            androidKeystorePath
+                    )
+                }
                 storeFile = file(androidKeystorePath!!)
                 storePassword = androidKeystorePassword
                 keyAlias = androidKeyAlias
