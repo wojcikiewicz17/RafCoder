@@ -13,12 +13,13 @@ core_xor_u64:
 .global core_mul_u64
 .type core_mul_u64, %function
 core_mul_u64:
-    push {r4, lr}
+    push {r4, r5, lr}
     mov r4, r0
-    umull r0, r1, r0, r2
+    mov r5, r1
+    umull r0, r1, r4, r2
     mla r1, r4, r3, r1
-    mla r1, r2, r1, r1
-    pop {r4, pc}
+    mla r1, r5, r2, r1
+    pop {r4, r5, pc}
 
 .global core_rotl_u64
 .type core_rotl_u64, %function
@@ -28,16 +29,17 @@ core_rotl_u64:
     bxeq lr
     cmp r2, #32
     blt 1f
-    cmp r2, #32
     beq 2f
+    push {r4, lr}
     sub r2, r2, #32
     rsb r3, r2, #32
-    mov r12, r0
-    lsl r0, r0, r2
-    orr r0, r0, r1, lsr r3
-    lsl r1, r1, r2
+    mov r4, r0
+    mov r12, r1
+    lsl r0, r12, r2
+    orr r0, r0, r4, lsr r3
+    lsl r1, r4, r2
     orr r1, r1, r12, lsr r3
-    bx lr
+    pop {r4, pc}
 2:
     mov r3, r0
     mov r0, r1
