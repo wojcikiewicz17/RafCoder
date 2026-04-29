@@ -24,7 +24,6 @@ OBJ := $(OBJ:.S=.o)
 all: libsector_core.a
 
 libsector_core.a: $(OBJ)
-	$(AR) rcs $@
 	$(AR) rcs $@ $(OBJ)
 
 %.o: %.c
