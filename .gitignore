@@ -1,3 +1,5 @@
 __pycache__/
 Evaluation/MBPP/eval_instruct.sh
 Evaluation/LeetCode/output/
+# Android wrapper jar is bootstrapped at runtime
+android/gradle/wrapper/gradle-wrapper.jar

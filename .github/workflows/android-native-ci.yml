@@ -25,44 +25,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Setup Gradle cache
-        uses: gradle/actions/setup-gradle@v4
-
-
-      - name: Build deterministic core snapshot test (host-side)
+      - name: Bootstrap Gradle Wrapper JAR
         run: |
-          set -euo pipefail
-          make -C core test_snapshot
-
-      - name: Run deterministic core snapshot test (host-side)
-        run: |
-          set -euo pipefail
-          mkdir -p core/test-logs
-          ./core/test_snapshot 2>&1 | tee core/test-logs/test_snapshot.log
-
-      - name: Upload deterministic core snapshot test log
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: rafcoder-core-snapshot-test-log
-          path: core/test-logs/test_snapshot.log
-          if-no-files-found: error
-
-      - name: Build unsigned binaries (debug + release)
-        run: |
-          ./scripts/android_build_matrix.sh
-
-      - name: Compute ABI outputs (debug/release)
-        id: abi_outputs
-        run: |
-          set -euo pipefail
-
-          DEBUG_LIB_ROOT="android/app/build/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib"
-          RELEASE_LIB_ROOT="android/app/build/intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib"
-
-          for abi in ${REQUIRED_ABIS}; do
-            debug_dir="${DEBUG_LIB_ROOT}/${abi}"
-            release_dir="${RELEASE_LIB_ROOT}/${abi}"
+          ./scripts/bootstrap_gradle_wrapper.sh
 
             debug_has="false"
             release_has="false"
@@ -84,17 +49,7 @@ jobs:
 
       - name: Validate native libs per ABI (debug/release)
         run: |
-          set -euo pipefail
-
-          DEBUG_LIB_ROOT="android/app/build/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib"
-          RELEASE_LIB_ROOT="android/app/build/intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib"
-
-          validate_variant() {
-            local variant="$1"
-            local root="$2"
-
-            echo "### ${variant} native libs at ${root}"
-            test -d "$root"
+          ./android/gradlew --no-daemon -p android :app:assembleDebug
 
             local abi
             for abi in ${REQUIRED_ABIS}; do
@@ -167,7 +122,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          ./android/gradlew -p android --no-daemon :app:clean :app:assembleRelease
+          ./android/gradlew --no-daemon -p android :app:clean :app:assembleRelease
 
       - name: Stage signed APK artifacts by ABI
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}

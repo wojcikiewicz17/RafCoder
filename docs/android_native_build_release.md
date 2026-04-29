@@ -14,9 +14,10 @@
 - Release signed APK: `android/artifacts/signed-release/` (artifact `rafcoder-apk-release-signed`, requires signing secrets)
 
 ## Local build
-Pré-requisito: Java/JDK compatível (Gradle é resolvido via wrapper do projeto).
+Pré-requisito: usar o Gradle Wrapper oficial em `android/gradlew` e inicializar o bootstrap do wrapper jar.
 
 ```bash
+./scripts/bootstrap_gradle_wrapper.sh
 ./scripts/android_build_matrix.sh
 ```
 
@@ -37,42 +38,9 @@ export ANDROID_KEY_PASSWORD='***'
 - `ANDROID_KEY_ALIAS`
 - `ANDROID_KEY_PASSWORD`
 
-Without these secrets CI still produces debug and unsigned release APKs.
+Without these secrets CI still produces unsigned debug/release APKs.
 
-## CMake native source contract (`RAFCODER_ROOT`)
-- `android/app/src/main/cpp/CMakeLists.txt` defines `RAFCODER_ROOT` as a CMake cache path (`set(... CACHE PATH ...)`).
-- Preferred source of truth: pass `-DRAFCODER_ROOT=/absolute/path/to/RafCoder` when invoking CMake (directly or via Gradle `externalNativeBuild.cmake.arguments`).
-- Fallback behavior: when `RAFCODER_ROOT` is not provided, CMake resolves it from the current relative path (`android/app/src/main/cpp/../../../../..`).
-- Hard validation: build aborts with `message(FATAL_ERROR ...)` if `RAFCODER_ROOT` path does not exist or if either required file is missing:
-  - `core/sector.c`
-  - `core/arch/primitives.c`
-- Error contract: the fatal error message explicitly instructs to set `-DRAFCODER_ROOT=/absolute/path/to/RafCoder repo root`.
-
-## Benchmark harness (`run_sector`) with machine-readable output
-
-Harness location: `core/benchmark_run_sector.c` (observa execução, sem alterar semântica de `run_sector`).
-
-Parâmetros metodológicos fixos no código:
-- warmup runs: `8`
-- sample runs: `32`
-
-### Ambiente de medição (registrar junto ao resultado)
-Antes de coletar benchmark, capture o ambiente:
-
-```bash
-uname -a
-lscpu
-cc --version
-```
-
-### Comandos exatos
-
-```bash
-make -C core benchmark_run_sector
-./core/benchmark_run_sector --iterations 1000 --format csv > benchmark_run_sector.csv
-./core/benchmark_run_sector --iterations 1000 --format json > benchmark_run_sector.json
-```
-
-### Limite metodológico
-Resultados valem apenas para o hardware/SO/toolchain efetivamente medidos.
-Não inferir ganho/perda para dispositivos não medidos.
+## Wrapper/Gradle version policy
+- Official entrypoint for Android builds: `./android/gradlew` (local + CI).
+- Wrapper JAR bootstrap: `./scripts/bootstrap_gradle_wrapper.sh` (fetches `android/gradle/wrapper/gradle-wrapper.jar` locally/CI, not committed).
+- Wrapper distribution pinned in `android/gradle/wrapper/gradle-wrapper.properties` and must stay aligned with CI expectations.
