@@ -3,8 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ANDROID_DIR="$ROOT_DIR/android"
-WRAPPER_JAR="$ANDROID_DIR/gradle/wrapper/gradle-wrapper.jar"
-WRAPPER_JAR_URL="https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradle/wrapper/gradle-wrapper.jar"
+REQUIRED_ABIS=("armeabi-v7a" "arm64-v8a")
+DEBUG_JNI_LIBS_DIR="$ANDROID_DIR/app/build/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib"
+RELEASE_JNI_LIBS_DIR="$ANDROID_DIR/app/build/intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib"
 
 if [[ ! -x "$ANDROID_DIR/gradlew" ]]; then
   echo "[ERR] Gradle Wrapper não encontrado em $ANDROID_DIR/gradlew."

@@ -41,6 +41,6 @@ export ANDROID_KEY_PASSWORD='***'
 Without these secrets CI still produces unsigned debug/release APKs.
 
 ## Wrapper/Gradle version policy
-- Official entrypoint for Android builds: `./android/gradlew` (local + CI).
-- Wrapper JAR bootstrap: `./scripts/bootstrap_gradle_wrapper.sh` (fetches `android/gradle/wrapper/gradle-wrapper.jar` locally/CI, not committed).
-- Wrapper distribution pinned in `android/gradle/wrapper/gradle-wrapper.properties` and must stay aligned with CI expectations.
+- Official entrypoint for Android builds: `./android/gradlew` (local + CI) and `android/gradlew.bat` on Windows.
+- Wrapper JAR bootstrap: `./scripts/bootstrap_gradle_wrapper.sh` (fetches `android/gradle/wrapper/gradle-wrapper.jar` em runtime no CI/local, não versionar binário no repositório).
+- Gradle version is pinned to `8.14.3` in `android/gradle/wrapper/gradle-wrapper.properties` and CI enforces this same version via `GRADLE_VERSION=8.14.3`.
