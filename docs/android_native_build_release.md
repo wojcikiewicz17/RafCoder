@@ -58,6 +58,19 @@ Sem essas variáveis, o script mantém o build unsigned e **ignora** a fase sign
 
 Without these secrets CI still produces unsigned debug/release APKs.
 
+## Artifact map (CI)
+### `android/artifacts/debug`
+- `rafcoder-apk-debug-armeabi-v7a` -> `android/artifacts/debug/rafcoder-armeabi-v7a-debug.apk`
+- `rafcoder-apk-debug-arm64-v8a` -> `android/artifacts/debug/rafcoder-arm64-v8a-debug.apk`
+
+### `android/artifacts/unsigned-release`
+- `rafcoder-apk-release-unsigned-armeabi-v7a` -> `android/artifacts/unsigned-release/rafcoder-armeabi-v7a-release-unsigned.apk`
+- `rafcoder-apk-release-unsigned-arm64-v8a` -> `android/artifacts/unsigned-release/rafcoder-arm64-v8a-release-unsigned.apk`
+
+### `android/artifacts/signed-release` (quando signing secrets existirem)
+- `rafcoder-apk-release-signed-armeabi-v7a` -> `android/artifacts/signed-release/rafcoder-armeabi-v7a-release-signed.apk`
+- `rafcoder-apk-release-signed-arm64-v8a` -> `android/artifacts/signed-release/rafcoder-arm64-v8a-release-signed.apk`
+
 ## Wrapper/Gradle version policy
 - Official entrypoint for Android builds: `./android/gradlew` (local + CI) and `android/gradlew.bat` on Windows.
 - Wrapper JAR bootstrap: `./scripts/bootstrap_gradle_wrapper.sh` (fetches `android/gradle/wrapper/gradle-wrapper.jar` em runtime no CI/local, não versionar binário no repositório).
