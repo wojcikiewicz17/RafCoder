@@ -18,10 +18,22 @@ if [[ -z "${ANDROID_HOME:-}" && -f "$ANDROID_DIR/local.properties" ]]; then
   export ANDROID_HOME="$(sed -n 's/^sdk.dir=//p' "$ANDROID_DIR/local.properties" | head -n1 | sed 's#\\#/#g')"
 fi
 
+HAS_SIGNING_VARS=false
+if [[ -n "${ANDROID_KEYSTORE_PATH:-}" && -n "${ANDROID_KEYSTORE_PASSWORD:-}" && -n "${ANDROID_KEY_ALIAS:-}" && -n "${ANDROID_KEY_PASSWORD:-}" ]]; then
+  HAS_SIGNING_VARS=true
+fi
+
+echo "[INFO] Executando build base (clean + debug + release)"
 "$ANDROID_DIR/gradlew" --no-daemon -p "$ANDROID_DIR" clean :app:assembleDebug :app:assembleRelease
 
-if [[ -n "${ANDROID_KEYSTORE_PATH:-}" && -n "${ANDROID_KEYSTORE_PASSWORD:-}" && -n "${ANDROID_KEY_ALIAS:-}" && -n "${ANDROID_KEY_PASSWORD:-}" ]]; then
-  "$ANDROID_DIR/gradlew" --no-daemon -p "$ANDROID_DIR" :app:assembleRelease
+if [[ "$HAS_SIGNING_VARS" == true ]]; then
+  echo "[INFO] Trilha produzida: debug + release signed (variáveis de signing detectadas)."
+  if [[ "${BUILD_EXPLICIT_UNSIGNED_RELEASE:-false}" == "true" ]]; then
+    echo "[WARN] BUILD_EXPLICIT_UNSIGNED_RELEASE=true definido, mas não há tarefa dedicated unsigned neste projeto."
+    echo "[WARN] Para gerar release unsigned explícito sem ambiguidade, adicione uma tarefa Gradle dedicada e integre aqui."
+  fi
+else
+  echo "[INFO] Trilha produzida: debug + release unsigned (variáveis de signing ausentes)."
 fi
 
 check_required_abis() {
