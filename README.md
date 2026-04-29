@@ -166,6 +166,7 @@ Relevant documents:
 - `docs/governance/research_only_and_noncommercial_policy.md`
 - `docs/governance/child_protection_and_global_inclusion_standard.md`
 - `docs/governance/human_dignity_and_epistemic_integrity.md`
+- `docs/repository_hygiene.md`
 
 Core principles:
 
