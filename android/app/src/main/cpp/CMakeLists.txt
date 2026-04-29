@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(rafcoder_native)
 
+enable_language(ASM)
+
 set(RAFCODER_ROOT "" CACHE PATH "Absolute path to RafCoder repository root. Preferred source of truth via -DRAFCODER_ROOT=/path/to/repo")
 
 set(RAFCODER_ROOT_FALLBACK "${CMAKE_CURRENT_LIST_DIR}/../../../../..")
@@ -16,6 +18,8 @@ endif()
 
 set(RAFCODER_SECTOR_C "${RAFCODER_ROOT}/core/sector.c")
 set(RAFCODER_PRIMITIVES_C "${RAFCODER_ROOT}/core/arch/primitives.c")
+set(RAFCODER_ARMV7_ASM "${RAFCODER_ROOT}/core/arch/armv7/primitives.S")
+set(RAFCODER_AARCH64_ASM "${RAFCODER_ROOT}/core/arch/aarch64/primitives.S")
 
 if(NOT EXISTS "${RAFCODER_SECTOR_C}")
     message(FATAL_ERROR
@@ -35,10 +39,16 @@ set(RAFCODER_NATIVE_SOURCES
     "${RAFCODER_PRIMITIVES_C}"
 )
 
-if(ANDROID_ABI STREQUAL "arm64-v8a")
-    list(APPEND RAFCODER_NATIVE_SOURCES
-        "${RAFCODER_ROOT}/core/arch/aarch64/primitives.S"
-    )
+if(ANDROID_ABI STREQUAL "armeabi-v7a")
+    if(NOT EXISTS "${RAFCODER_ARMV7_ASM}")
+        message(FATAL_ERROR "Missing ARMv7 primitive route: '${RAFCODER_ARMV7_ASM}'")
+    endif()
+    list(APPEND RAFCODER_NATIVE_SOURCES "${RAFCODER_ARMV7_ASM}")
+elseif(ANDROID_ABI STREQUAL "arm64-v8a")
+    if(NOT EXISTS "${RAFCODER_AARCH64_ASM}")
+        message(FATAL_ERROR "Missing AArch64 primitive route: '${RAFCODER_AARCH64_ASM}'")
+    endif()
+    list(APPEND RAFCODER_NATIVE_SOURCES "${RAFCODER_AARCH64_ASM}")
 endif()
 
 add_library(rafcoder_native SHARED ${RAFCODER_NATIVE_SOURCES})
