@@ -1,4 +1,4 @@
-name: Benchmark Top-56 Artifacts
+name: Benchmark Top-56 Runtime Binary Artifacts
 
 on:
   workflow_dispatch:
@@ -37,7 +37,7 @@ defaults:
 
 jobs:
   benchmark-top56:
-    name: Generate benchmark artifacts
+    name: Build runtime binary and benchmark report
     runs-on: ubuntu-latest
 
     steps:
@@ -52,9 +52,9 @@ jobs:
       - name: Install native toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential binutils
+          sudo apt-get install -y build-essential binutils file
 
-      - name: Generate Top-56 benchmark artifacts
+      - name: Generate runtime binary and Top-56 benchmark report
         env:
           CC: gcc
         run: |
@@ -65,11 +65,68 @@ jobs:
             --samples "${{ github.event.inputs.samples || '5' }}" \
             --cases "${{ github.event.inputs.cases || '1,7,42,128,512,2048' }}"
 
+      - name: Package runtime binary produced during the action
+        run: |
+          set -euo pipefail
+          mkdir -p dist/rafcoder-sector-runtime-linux-x86_64
+
+          cp benchmark_artifacts/benchmark_sector \
+            dist/rafcoder-sector-runtime-linux-x86_64/rafcoder-sector-runtime
+          cp benchmark_artifacts/benchmark_sector_harness.c \
+            dist/rafcoder-sector-runtime-linux-x86_64/benchmark_sector_harness.c
+          cp benchmark_artifacts/benchmark_top56.md \
+            dist/rafcoder-sector-runtime-linux-x86_64/benchmark_top56.md
+          cp benchmark_artifacts/benchmark_top56.json \
+            dist/rafcoder-sector-runtime-linux-x86_64/benchmark_top56.json
+          cp benchmark_artifacts/benchmark_matrix.csv \
+            dist/rafcoder-sector-runtime-linux-x86_64/benchmark_matrix.csv
+          cp benchmark_artifacts/build_stdout.txt \
+            dist/rafcoder-sector-runtime-linux-x86_64/build_stdout.txt
+          cp benchmark_artifacts/build_stderr.txt \
+            dist/rafcoder-sector-runtime-linux-x86_64/build_stderr.txt
+
+          chmod +x dist/rafcoder-sector-runtime-linux-x86_64/rafcoder-sector-runtime
+
+          {
+            echo "# RafCoder runtime binary artifact"
+            echo
+            echo "Generated inside GitHub Actions runtime, not committed to the repository."
+            echo
+            echo "## Build context"
+            echo
+            echo "- repository: ${{ github.repository }}"
+            echo "- ref: ${{ github.ref }}"
+            echo "- sha: ${{ github.sha }}"
+            echo "- runner_os: ${{ runner.os }}"
+            echo "- runner_arch: ${{ runner.arch }}"
+            echo "- compiler: gcc"
+            echo
+            echo "## Binary inspection"
+            echo
+            file dist/rafcoder-sector-runtime-linux-x86_64/rafcoder-sector-runtime || true
+            echo
+            echo "## Checksums"
+            echo
+            sha256sum dist/rafcoder-sector-runtime-linux-x86_64/*
+          } > dist/rafcoder-sector-runtime-linux-x86_64/ARTIFACT_MANIFEST.md
+
+          tar -C dist -czf rafcoder-sector-runtime-linux-x86_64.tar.gz \
+            rafcoder-sector-runtime-linux-x86_64
+          sha256sum rafcoder-sector-runtime-linux-x86_64.tar.gz \
+            > rafcoder-sector-runtime-linux-x86_64.tar.gz.sha256
+
+      - name: Smoke test packaged runtime binary
+        run: |
+          set -euo pipefail
+          dist/rafcoder-sector-runtime-linux-x86_64/rafcoder-sector-runtime 42 10 \
+            > dist/rafcoder-sector-runtime-linux-x86_64/runtime_smoke_test.txt
+          cat dist/rafcoder-sector-runtime-linux-x86_64/runtime_smoke_test.txt
+
       - name: Print specialized benchmark report
         run: |
           cat benchmark_artifacts/benchmark_top56.md
 
-      - name: Upload benchmark report artifacts
+      - name: Upload benchmark report artifact
         uses: actions/upload-artifact@v4
         with:
           name: rafcoder-top56-benchmark-report
@@ -80,5 +137,17 @@ jobs:
             benchmark_artifacts/build_stdout.txt
             benchmark_artifacts/build_stderr.txt
             benchmark_artifacts/benchmark_sector_harness.c
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload runtime binary package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rafcoder-sector-runtime-linux-x86_64
+          path: |
+            rafcoder-sector-runtime-linux-x86_64.tar.gz
+            rafcoder-sector-runtime-linux-x86_64.tar.gz.sha256
+            dist/rafcoder-sector-runtime-linux-x86_64/ARTIFACT_MANIFEST.md
+            dist/rafcoder-sector-runtime-linux-x86_64/runtime_smoke_test.txt
           if-no-files-found: error
           retention-days: 30
