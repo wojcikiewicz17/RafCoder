@@ -64,12 +64,31 @@ jobs:
           set -euo pipefail
           mkdir -p android/artifacts/debug android/artifacts/unsigned-release
 
-          for abi in ${REQUIRED_ABIS}; do
-            debug_apk="android/app/build/outputs/apk/debug/app-${abi}-debug.apk"
-            unsigned_release_apk="android/app/build/outputs/apk/release/app-${abi}-release-unsigned.apk"
+          resolve_apk() {
+            local abi="$1"
+            local variant_dir="$2"
+            local output_name="$3"
 
-            test -f "$debug_apk"
-            test -f "$unsigned_release_apk"
+            local split_apk="android/app/build/outputs/apk/${variant_dir}/app-${abi}-${output_name}.apk"
+            local universal_apk="android/app/build/outputs/apk/${variant_dir}/app-${output_name}.apk"
+
+            if [ -f "$split_apk" ]; then
+              echo "$split_apk"
+              return 0
+            fi
+
+            if [ -f "$universal_apk" ]; then
+              echo "$universal_apk"
+              return 0
+            fi
+
+            echo "Missing APK for ABI ${abi} (${variant_dir}/${output_name})" >&2
+            return 1
+          }
+
+          for abi in ${REQUIRED_ABIS}; do
+            debug_apk="$(resolve_apk "$abi" debug debug)"
+            unsigned_release_apk="$(resolve_apk "$abi" release release-unsigned)"
 
             cp -v "$debug_apk" "android/artifacts/debug/rafcoder-${abi}-debug.apk"
             cp -v "$unsigned_release_apk" "android/artifacts/unsigned-release/rafcoder-${abi}-release-unsigned.apk"
@@ -99,9 +118,27 @@ jobs:
           set -euo pipefail
           mkdir -p android/artifacts/signed-release
 
+          resolve_signed_apk() {
+            local abi="$1"
+            local split_apk="android/app/build/outputs/apk/release/app-${abi}-release.apk"
+            local universal_apk="android/app/build/outputs/apk/release/app-release.apk"
+
+            if [ -f "$split_apk" ]; then
+              echo "$split_apk"
+              return 0
+            fi
+
+            if [ -f "$universal_apk" ]; then
+              echo "$universal_apk"
+              return 0
+            fi
+
+            echo "Missing signed release APK for ABI ${abi}" >&2
+            return 1
+          }
+
           for abi in ${REQUIRED_ABIS}; do
-            signed_apk="android/app/build/outputs/apk/release/app-${abi}-release.apk"
-            test -f "$signed_apk"
+            signed_apk="$(resolve_signed_apk "$abi")"
             cp -v "$signed_apk" "android/artifacts/signed-release/rafcoder-${abi}-release-signed.apk"
           done
 
