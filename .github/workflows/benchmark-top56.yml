@@ -1,0 +1,84 @@
+name: Benchmark Top-56 Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      repeats:
+        description: Benchmark repeats per iteration case
+        required: false
+        default: "2000"
+      samples:
+        description: Samples per iteration case
+        required: false
+        default: "5"
+      cases:
+        description: Comma-separated sector iteration cases
+        required: false
+        default: "1,7,42,128,512,2048"
+  push:
+    branches:
+      - main
+    paths:
+      - "core/**"
+      - "scripts/benchmark_sector_top56.py"
+      - ".github/workflows/benchmark-top56.yml"
+  pull_request:
+    paths:
+      - "core/**"
+      - "scripts/benchmark_sector_top56.py"
+      - ".github/workflows/benchmark-top56.yml"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  benchmark-top56:
+    name: Generate benchmark artifacts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install native toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential binutils
+
+      - name: Generate Top-56 benchmark artifacts
+        env:
+          CC: gcc
+        run: |
+          python scripts/benchmark_sector_top56.py \
+            --out benchmark_artifacts \
+            --cc gcc \
+            --repeats "${{ github.event.inputs.repeats || '2000' }}" \
+            --samples "${{ github.event.inputs.samples || '5' }}" \
+            --cases "${{ github.event.inputs.cases || '1,7,42,128,512,2048' }}"
+
+      - name: Print specialized benchmark report
+        run: |
+          cat benchmark_artifacts/benchmark_top56.md
+
+      - name: Upload benchmark report artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rafcoder-top56-benchmark-report
+          path: |
+            benchmark_artifacts/benchmark_top56.md
+            benchmark_artifacts/benchmark_top56.json
+            benchmark_artifacts/benchmark_matrix.csv
+            benchmark_artifacts/build_stdout.txt
+            benchmark_artifacts/build_stderr.txt
+            benchmark_artifacts/benchmark_sector_harness.c
+          if-no-files-found: error
+          retention-days: 30
