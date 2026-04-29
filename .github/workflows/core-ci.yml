@@ -15,6 +15,9 @@ jobs:
       - name: Build core static library
         run: make -C core all
 
+      - name: Run primitive equivalence test
+        run: make -C core test_primitives_equivalence && ./core/test_primitives_equivalence
+
       - name: Run deterministic snapshot test
         run: make -C core test_snapshot && ./core/test_snapshot
 
