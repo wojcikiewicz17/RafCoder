@@ -5,6 +5,7 @@ RAFAELOS / RafCoder Top-56 benchmark artifact generator.
 This script is intentionally self-contained for GitHub Actions:
 - builds a native C benchmark harness around core/sector.c;
 - runs deterministic sector benchmarks for several iteration counts;
+- asserts deterministic snapshots per benchmark case;
 - collects up to 56 market-style engineering metrics;
 - emits JSON, CSV and Markdown artifacts.
 
@@ -19,15 +20,13 @@ import argparse
 import csv
 import hashlib
 import json
-import math
 import os
 import platform
 import shutil
 import statistics
 import subprocess
-import sys
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
@@ -39,10 +38,20 @@ HARNESS_C = r'''
 #include <time.h>
 #include "core/sector.h"
 
+#define BENCH_FNV_OFFSET 0xCBF29CE484222325ULL
+#define BENCH_FNV_PRIME  0x100000001B3ULL
+
 static uint64_t nsec_now(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ((uint64_t)ts.tv_sec * 1000000000ULL) + (uint64_t)ts.tv_nsec;
+}
+
+static uint64_t checksum_mix(uint64_t checksum, uint64_t value) {
+    checksum ^= value;
+    checksum *= BENCH_FNV_PRIME;
+    checksum ^= checksum >> 32u;
+    return checksum;
 }
 
 int main(int argc, char** argv) {
@@ -51,7 +60,7 @@ int main(int argc, char** argv) {
     uint32_t i;
     uint64_t start;
     uint64_t end;
-    uint64_t checksum = 0ULL;
+    uint64_t checksum = BENCH_FNV_OFFSET;
     struct state s;
 
     if (argc > 1) {
@@ -77,12 +86,12 @@ int main(int argc, char** argv) {
         }
 
         run_sector(&s, iterations);
-        checksum ^= s.hash64;
-        checksum ^= ((uint64_t)s.crc32 << 32u);
-        checksum ^= (uint64_t)s.coherence_q16;
-        checksum ^= ((uint64_t)s.entropy_q16 << 16u);
+        checksum = checksum_mix(checksum, s.hash64);
+        checksum = checksum_mix(checksum, ((uint64_t)s.crc32 << 32u) | s.coherence_q16);
+        checksum = checksum_mix(checksum, ((uint64_t)s.entropy_q16 << 32u) | s.last_entropy_milli);
+        checksum = checksum_mix(checksum, (uint64_t)s.last_invariant_milli);
         for (j = 0u; j < CORE_OUTPUT_WORDS; ++j) {
-            checksum ^= ((uint64_t)s.output[j] << ((j & 7u) * 8u));
+            checksum = checksum_mix(checksum, ((uint64_t)j << 32u) | s.output[j]);
         }
     }
     end = nsec_now();
@@ -121,6 +130,10 @@ def run(cmd: List[str], cwd: Path, check: bool = True) -> subprocess.CompletedPr
     return subprocess.run(cmd, cwd=str(cwd), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=check)
 
 
+def sha256_bytes(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -136,6 +149,25 @@ def parse_key_values(text: str) -> Dict[str, str]:
             k, v = line.split("=", 1)
             out[k.strip()] = v.strip()
     return out
+
+
+def snapshot_from_kv(kv: Dict[str, str]) -> Dict[str, object]:
+    return {
+        "checksum": kv.get("checksum", ""),
+        "hash64": kv.get("hash64", ""),
+        "crc32": kv.get("crc32", ""),
+        "coherence_q16": int(kv.get("coherence_q16", "0")),
+        "entropy_q16": int(kv.get("entropy_q16", "0")),
+        "last_entropy_milli": int(kv.get("last_entropy_milli", "0")),
+        "last_invariant_milli": int(kv.get("last_invariant_milli", "0")),
+        "output_words": int(kv.get("output_words", "0")),
+        "outputs": [kv.get(f"output_{i}", "") for i in range(8)],
+    }
+
+
+def snapshot_signature(snapshot: Dict[str, object]) -> str:
+    data = json.dumps(snapshot, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return sha256_bytes(data)
 
 
 def binary_size(path: Path) -> int:
@@ -195,19 +227,39 @@ def build_harness(root: Path, out_dir: Path, cc: str, cflags: List[str]) -> Path
     return binary
 
 
-def execute_matrix(root: Path, binary: Path, cases: Iterable[int], repeats: int, samples: int) -> Tuple[List[Dict[str, object]], List[str]]:
+def execute_matrix(
+    root: Path,
+    binary: Path,
+    cases: Iterable[int],
+    repeats: int,
+    samples: int,
+    fail_on_nondeterminism: bool,
+) -> Tuple[List[Dict[str, object]], List[Dict[str, object]]]:
     rows: List[Dict[str, object]] = []
-    checksums: List[str] = []
+    snapshots: List[Dict[str, object]] = []
+    nondeterministic_cases: List[int] = []
+
     for iterations in cases:
         sample_ns: List[int] = []
+        sample_snapshots: List[Dict[str, object]] = []
+        sample_signatures: List[str] = []
         last: Dict[str, str] = {}
+
         for _ in range(samples):
             cp = run([str(binary), str(iterations), str(repeats)], root, check=False)
             if cp.returncode != 0:
                 raise SystemExit(f"benchmark failed for iterations={iterations}: {cp.stderr}\n{cp.stdout}")
             kv = parse_key_values(cp.stdout)
             last = kv
+            snapshot = snapshot_from_kv(kv)
+            sample_snapshots.append(snapshot)
+            sample_signatures.append(snapshot_signature(snapshot))
             sample_ns.append(int(kv["elapsed_ns"]))
+
+        deterministic_samples = len(set(sample_signatures)) == 1
+        if not deterministic_samples:
+            nondeterministic_cases.append(iterations)
+
         mean_ns = statistics.mean(sample_ns)
         median_ns = statistics.median(sample_ns)
         stdev_ns = statistics.pstdev(sample_ns) if len(sample_ns) > 1 else 0.0
@@ -216,6 +268,8 @@ def execute_matrix(root: Path, binary: Path, cases: Iterable[int], repeats: int,
         total_ops = iterations * repeats
         ns_per_sector = mean_ns / total_ops if total_ops else 0.0
         sectors_per_sec = 1_000_000_000.0 / ns_per_sector if ns_per_sector else 0.0
+        stable_snapshot = sample_snapshots[-1]
+
         rows.append({
             "iterations": iterations,
             "repeats": repeats,
@@ -227,6 +281,9 @@ def execute_matrix(root: Path, binary: Path, cases: Iterable[int], repeats: int,
             "elapsed_ns_max": max_ns,
             "ns_per_sector": ns_per_sector,
             "sectors_per_second": sectors_per_sec,
+            "deterministic_samples": deterministic_samples,
+            "sample_signature": sample_signatures[-1],
+            "unique_sample_signatures": len(set(sample_signatures)),
             "checksum": last.get("checksum", ""),
             "hash64": last.get("hash64", ""),
             "crc32": last.get("crc32", ""),
@@ -237,8 +294,21 @@ def execute_matrix(root: Path, binary: Path, cases: Iterable[int], repeats: int,
             "output_words": int(last.get("output_words", "0")),
             **{f"output_{i}": last.get(f"output_{i}", "") for i in range(8)},
         })
-        checksums.append(str(last.get("checksum", "")))
-    return rows, checksums
+
+        snapshots.append({
+            "iterations": iterations,
+            "repeats": repeats,
+            "samples": samples,
+            "deterministic_samples": deterministic_samples,
+            "sample_signature": sample_signatures[-1],
+            "unique_sample_signatures": sorted(set(sample_signatures)),
+            "snapshot": stable_snapshot,
+        })
+
+    if nondeterministic_cases and fail_on_nondeterminism:
+        raise SystemExit(f"non-deterministic snapshots detected for cases: {nondeterministic_cases}")
+
+    return rows, snapshots
 
 
 def stability_score(rows: List[Dict[str, object]]) -> float:
@@ -253,19 +323,20 @@ def stability_score(rows: List[Dict[str, object]]) -> float:
     return max(0.0, 100.0 * (1.0 - statistics.mean(penalties)))
 
 
-def make_metrics(root: Path, binary: Path, rows: List[Dict[str, object]], checksums: List[str], cc: str, cflags: List[str]) -> List[Metric]:
+def make_metrics(root: Path, binary: Path, rows: List[Dict[str, object]], snapshots: List[Dict[str, object]], cc: str, cflags: List[str]) -> List[Metric]:
     best = min(rows, key=lambda r: float(r["ns_per_sector"]))
     worst = max(rows, key=lambda r: float(r["ns_per_sector"]))
     sections = size_sections(root, binary)
     bsize = binary_size(binary)
     syms = count_symbols(root, binary)
     digest = sha256_file(binary)
-    deterministic = len(set(checksums)) == len(checksums)
+    deterministic = all(bool(r["deterministic_samples"]) for r in rows)
     same_output_words = all(int(r["output_words"]) == 8 for r in rows)
     coherences = [int(r["coherence_q16"]) for r in rows]
     entropies = [int(r["entropy_q16"]) for r in rows]
     invariants = [int(r["last_invariant_milli"]) for r in rows]
     ns_values = [float(r["ns_per_sector"]) for r in rows]
+    checksum_values = [str(r["checksum"]) for r in rows]
 
     raw: List[Tuple[str, str, object, str, str]] = [
         ("Throughput", "best_ns_per_sector", round(float(best["ns_per_sector"]), 3), "ns/sector", "Lower is better for native runtime throughput."),
@@ -277,8 +348,9 @@ def make_metrics(root: Path, binary: Path, rows: List[Dict[str, object]], checks
         ("Stability", "timing_stability_score", round(stability_score(rows), 3), "0-100", "Derived from coefficient of variation across samples."),
         ("Stability", "sample_count", sum(int(r["samples"]) for r in rows), "samples", "Total benchmark samples collected."),
         ("Stability", "matrix_cases", len(rows), "cases", "Number of iteration cases tested."),
-        ("Determinism", "checksum_uniqueness", len(set(checksums)), "unique", "Checksums should vary by iteration case while remaining reproducible per case."),
-        ("Determinism", "deterministic_case_outputs", deterministic, "bool", "True means each case produced an output checksum."),
+        ("Determinism", "checksum_uniqueness_across_cases", len(set(checksum_values)), "unique", "Checksums should vary by iteration case."),
+        ("Determinism", "deterministic_snapshot_assertions", deterministic, "bool", "True means repeated samples per case produced identical snapshots."),
+        ("Determinism", "snapshot_cases_asserted", len(snapshots), "cases", "Number of benchmark cases with deterministic snapshot checks."),
         ("Determinism", "snapshot_hash64_last", rows[-1]["hash64"], "hex", "Final state hash for the largest benchmark case."),
         ("Determinism", "snapshot_crc32_last", rows[-1]["crc32"], "hex", "Final CRC32 for the largest benchmark case."),
         ("Determinism", "output_words_are_8", same_output_words, "bool", "Checks the compact output vector contract."),
@@ -313,32 +385,38 @@ def make_metrics(root: Path, binary: Path, rows: List[Dict[str, object]], checks
         ("CI", "artifact_json", "benchmark_top56.json", "file", "Machine-readable benchmark report."),
         ("CI", "artifact_csv", "benchmark_matrix.csv", "file", "Tabular benchmark matrix."),
         ("CI", "artifact_markdown", "benchmark_top56.md", "file", "Human-readable specialized analysis report."),
+        ("CI", "artifact_snapshots", "benchmark_snapshots.json", "file", "Deterministic snapshot assertions and signatures."),
         ("CI", "build_stdout", "build_stdout.txt", "file", "Compiler stdout artifact."),
         ("CI", "build_stderr", "build_stderr.txt", "file", "Compiler stderr artifact."),
         ("Audit", "market_metric_count_target", 56, "metrics", "Top-56 benchmark/audit target."),
         ("Audit", "claims_are_runner_relative", True, "bool", "Metrics are CI-runner measurements, not universal hardware claims."),
         ("Audit", "native_core_no_heap_claim", "source-level intended", "text", "Core path is designed without malloc/GC; static verification is future work."),
         ("Audit", "external_dependency_weight", "low", "label", "Benchmark uses Python stdlib plus system C compiler."),
-        ("Audit", "reviewability", "json/csv/md", "formats", "Artifacts support machine and human review."),
+        ("Audit", "reviewability", "json/csv/md/snapshots", "formats", "Artifacts support machine and human review."),
         ("Audit", "reproducibility_level", "CI reproducible", "label", "Re-runnable through GitHub Actions."),
         ("Audit", "specialized_analysis_scope", "performance,size,determinism,portability,core-state", "domains", "Scope covered by the generated artifacts."),
         ("Audit", "next_required_baseline", "Python_vs_C_vs_ASM", "label", "Next market-grade step is multi-runtime comparison."),
-        ("Audit", "benchmark_status", "experimental", "label", "Not a certified benchmark suite yet."),
     ]
     return [Metric(i + 1, *item) for i, item in enumerate(raw[:56])]
 
 
-def write_outputs(out_dir: Path, rows: List[Dict[str, object]], metrics: List[Metric]) -> None:
+def write_outputs(out_dir: Path, rows: List[Dict[str, object]], snapshots: List[Dict[str, object]], metrics: List[Metric]) -> None:
     with (out_dir / "benchmark_matrix.csv").open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
 
+    (out_dir / "benchmark_snapshots.json").write_text(
+        json.dumps({"schema": "rafcoder.top56.snapshots.v1", "snapshots": snapshots}, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
     payload = {
-        "schema": "rafcoder.top56.benchmark.v1",
+        "schema": "rafcoder.top56.benchmark.v2",
         "generated_at_unix": int(time.time()),
         "metrics": [asdict(m) for m in metrics],
         "matrix": rows,
+        "snapshots": snapshots,
     }
     (out_dir / "benchmark_top56.json").write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
@@ -361,14 +439,27 @@ def write_outputs(out_dir: Path, rows: List[Dict[str, object]], metrics: List[Me
         "",
         "## Benchmark matrix",
         "",
-        "| iterations | repeats | samples | mean ns | ns/sector | sectors/s | checksum |",
-        "|---:|---:|---:|---:|---:|---:|---|",
+        "| iterations | repeats | samples | deterministic | mean ns | ns/sector | sectors/s | checksum |",
+        "|---:|---:|---:|---|---:|---:|---:|---|",
     ])
     for r in rows:
         lines.append(
-            f"| {r['iterations']} | {r['repeats']} | {r['samples']} | "
+            f"| {r['iterations']} | {r['repeats']} | {r['samples']} | {r['deterministic_samples']} | "
             f"{float(r['elapsed_ns_mean']):.3f} | {float(r['ns_per_sector']):.3f} | "
             f"{float(r['sectors_per_second']):.3f} | `{r['checksum']}` |"
+        )
+
+    lines.extend([
+        "",
+        "## Deterministic snapshots",
+        "",
+        "| iterations | signature | hash64 | crc32 | output words |",
+        "|---:|---|---|---|---:|",
+    ])
+    for s in snapshots:
+        snap = s["snapshot"]
+        lines.append(
+            f"| {s['iterations']} | `{s['sample_signature']}` | `{snap['hash64']}` | `{snap['crc32']}` | {snap['output_words']} |"
         )
 
     lines.extend([
@@ -376,6 +467,7 @@ def write_outputs(out_dir: Path, rows: List[Dict[str, object]], metrics: List[Me
         "## Specialized analysis notes",
         "",
         "- This workflow creates artifacts for performance, binary size, determinism, state quality, portability and CI reproducibility.",
+        "- Repeated samples for each benchmark case are asserted against deterministic snapshot signatures.",
         "- These are not universal hardware claims; they are runner-relative measurements intended for regression tracking.",
         "- The next stronger benchmark layer should compare Python reference, portable C, x86_64 ASM and Android ARM64/ARM32 paths.",
         "- Market-grade claims require fixed hardware, pinned compiler, repeated cold/warm runs and baseline competitors.",
@@ -392,6 +484,7 @@ def main() -> int:
     parser.add_argument("--samples", type=int, default=5)
     parser.add_argument("--cases", default="1,7,42,128,512,2048")
     parser.add_argument("--cflags", default="-O2,-Wall,-Wextra,-Werror")
+    parser.add_argument("--allow-nondeterminism", action="store_true", help="Do not fail when repeated snapshots diverge.")
     args = parser.parse_args()
 
     root = Path.cwd()
@@ -402,13 +495,21 @@ def main() -> int:
     cases = [int(x.strip()) for x in args.cases.split(",") if x.strip()]
 
     binary = build_harness(root, out_dir, args.cc, cflags)
-    rows, checksums = execute_matrix(root, binary, cases, args.repeats, args.samples)
-    metrics = make_metrics(root, binary, rows, checksums, args.cc, cflags)
-    write_outputs(out_dir, rows, metrics)
+    rows, snapshots = execute_matrix(
+        root,
+        binary,
+        cases,
+        args.repeats,
+        args.samples,
+        fail_on_nondeterminism=not args.allow_nondeterminism,
+    )
+    metrics = make_metrics(root, binary, rows, snapshots, args.cc, cflags)
+    write_outputs(out_dir, rows, snapshots, metrics)
 
     print(f"generated {out_dir / 'benchmark_top56.md'}")
     print(f"generated {out_dir / 'benchmark_top56.json'}")
     print(f"generated {out_dir / 'benchmark_matrix.csv'}")
+    print(f"generated {out_dir / 'benchmark_snapshots.json'}")
     return 0
 
 
