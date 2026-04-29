@@ -43,7 +43,7 @@ Without these secrets CI still produces debug and unsigned release APKs.
 - `android/app/src/main/cpp/CMakeLists.txt` defines `RAFCODER_ROOT` as a CMake cache path (`set(... CACHE PATH ...)`).
 - Preferred source of truth: pass `-DRAFCODER_ROOT=/absolute/path/to/RafCoder` when invoking CMake (directly or via Gradle `externalNativeBuild.cmake.arguments`).
 - Fallback behavior: when `RAFCODER_ROOT` is not provided, CMake resolves it from the current relative path (`android/app/src/main/cpp/../../../../..`).
-- Hard validation: build aborts with `message(FATAL_ERROR ...)` if either required file is missing:
+- Hard validation: build aborts with `message(FATAL_ERROR ...)` if `RAFCODER_ROOT` path does not exist or if either required file is missing:
   - `core/sector.c`
   - `core/arch/primitives.c`
 - Error contract: the fatal error message explicitly instructs to set `-DRAFCODER_ROOT=/absolute/path/to/RafCoder repo root`.

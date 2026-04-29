@@ -8,19 +8,25 @@ if(NOT RAFCODER_ROOT)
     get_filename_component(RAFCODER_ROOT "${RAFCODER_ROOT_FALLBACK}" ABSOLUTE)
 endif()
 
+if(NOT EXISTS "${RAFCODER_ROOT}")
+    message(FATAL_ERROR
+        "RAFCODER_ROOT path does not exist: '${RAFCODER_ROOT}'. "
+        "Use -DRAFCODER_ROOT=/absolute/path/to/RafCoder repo root.")
+endif()
+
 set(RAFCODER_SECTOR_C "${RAFCODER_ROOT}/core/sector.c")
 set(RAFCODER_PRIMITIVES_C "${RAFCODER_ROOT}/core/arch/primitives.c")
 
 if(NOT EXISTS "${RAFCODER_SECTOR_C}")
     message(FATAL_ERROR
         "RAFCODER_ROOT is invalid: '${RAFCODER_ROOT}'. Missing required file: '${RAFCODER_SECTOR_C}'. "
-        "Set -DRAFCODER_ROOT=/absolute/path/to/RafCoder repo root (or fix the fallback path '${RAFCODER_ROOT_FALLBACK}').")
+        "Use -DRAFCODER_ROOT=/absolute/path/to/RafCoder repo root (or fix fallback '${RAFCODER_ROOT_FALLBACK}').")
 endif()
 
 if(NOT EXISTS "${RAFCODER_PRIMITIVES_C}")
     message(FATAL_ERROR
         "RAFCODER_ROOT is invalid: '${RAFCODER_ROOT}'. Missing required file: '${RAFCODER_PRIMITIVES_C}'. "
-        "Set -DRAFCODER_ROOT=/absolute/path/to/RafCoder repo root (or fix the fallback path '${RAFCODER_ROOT_FALLBACK}').")
+        "Use -DRAFCODER_ROOT=/absolute/path/to/RafCoder repo root (or fix fallback '${RAFCODER_ROOT_FALLBACK}').")
 endif()
 
 set(RAFCODER_NATIVE_SOURCES
