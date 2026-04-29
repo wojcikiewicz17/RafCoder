@@ -37,6 +37,7 @@ The active engineering direction is the RAFAELOS native runtime: compact state, 
 - Android project in `android/`.
 - JNI bridge calling `run_sector(42)` and displaying native output.
 - CI workflow for Android APK artifacts.
+- GitHub Actions workflow that builds a Linux x86_64 runtime binary during CI execution and uploads benchmark/report artifacts.
 - Python reference benchmark for 40-sector grouping.
 - Governance documents for licensing, safety, child protection and responsible use.
 
@@ -47,6 +48,7 @@ The active engineering direction is the RAFAELOS native runtime: compact state, 
 - Reentrant/thread-safe workspace for `run_sector()`.
 - Deterministic C snapshot test in CI.
 - Formal benchmark comparison between Python, C and assembly outputs.
+- Android ARM64/ARM32 runtime binary artifact packages from the benchmark workflow.
 
 ---
 
@@ -138,7 +140,69 @@ This prototype is useful as a low-level reference, but the portable C core is th
 
 ---
 
-## 7. Python reference benchmark
+## 7. Top-56 runtime benchmark artifacts
+
+The repository includes a GitHub Actions workflow that builds a native runtime binary during CI execution, runs a benchmark matrix and uploads both the runtime package and specialized reports as artifacts.
+
+Workflow:
+
+```text
+.github/workflows/benchmark-top56.yml
+```
+
+Generator:
+
+```text
+scripts/benchmark_sector_top56.py
+```
+
+Detailed documentation:
+
+```text
+docs/benchmark_top56_runtime_artifacts.md
+```
+
+The workflow runs on `push`, `pull_request` and manual `workflow_dispatch`. It compiles the sector runtime inside the Actions runner, executes a smoke test, packages the runtime and uploads two artifact groups:
+
+```text
+rafcoder-top56-benchmark-report
+rafcoder-sector-runtime-linux-x86_64
+```
+
+The report artifact contains Markdown, JSON and CSV outputs for up to 56 metrics covering:
+
+- throughput;
+- timing stability;
+- deterministic output snapshots;
+- binary size;
+- section size;
+- symbol count;
+- portability;
+- core state quality;
+- scaling behavior;
+- CI reproducibility;
+- audit readiness.
+
+The runtime artifact contains:
+
+```text
+rafcoder-sector-runtime-linux-x86_64.tar.gz
+rafcoder-sector-runtime-linux-x86_64.tar.gz.sha256
+ARTIFACT_MANIFEST.md
+runtime_smoke_test.txt
+```
+
+Manual run path:
+
+```text
+GitHub -> Actions -> Benchmark Top-56 Runtime Binary Artifacts -> Run workflow
+```
+
+These measurements are CI-runner-relative and intended for regression tracking and artifact review. They are not universal hardware claims.
+
+---
+
+## 8. Python reference benchmark
 
 A lightweight Python reference exists at:
 
@@ -156,7 +220,7 @@ This script is intended as a research/reference baseline, not as the performance
 
 ---
 
-## 8. Governance and safety
+## 9. Governance and safety
 
 RafCoder treats safety and governance as engineering requirements, not cosmetic documentation.
 
@@ -178,7 +242,7 @@ Core principles:
 
 ---
 
-## 9. Development discipline
+## 10. Development discipline
 
 Every material change should preserve:
 
@@ -201,7 +265,7 @@ Preferred implementation style:
 
 ---
 
-## 10. Roadmap
+## 11. Roadmap
 
 ### F de resolvido
 
@@ -210,6 +274,7 @@ Preferred implementation style:
 - Android JNI bridge calls the C core.
 - Governance documentation exists.
 - Android CI artifact workflow exists.
+- Top-56 benchmark workflow builds a Linux x86_64 runtime binary and publishes reports/artifacts.
 
 ### F de gap
 
@@ -217,16 +282,18 @@ Preferred implementation style:
 - `run_sector()` still needs a reentrant workspace.
 - CI must validate deterministic behavior, not only build artifacts.
 - README/upstream identity must continue being curated as the project evolves.
+- Top-56 artifact workflow still needs Android ARM64/ARM32 packages and multi-runtime baselines.
 
 ### F de next
 
 1. Add deterministic C snapshot tests for `run_sector(42)`.
 2. Refactor `run_sector()` to remove mutable global scratch state.
 3. Add `core/arch/armv7/primitives.S` and later NEON block paths.
+4. Extend benchmark artifacts to compare Python, portable C, x86_64 ASM and Android native routes.
 
 ---
 
-## 11. Upstream notice
+## 12. Upstream notice
 
 This repository contains material derived from the DeepSeek Coder open-source release. License notices and model-use restrictions must be preserved according to `LICENSE-CODE`, `LICENSE-MODEL` and the applicable upstream terms.
 
@@ -234,7 +301,7 @@ RafCoder-specific additions focus on native runtime research, RAFAELOS low-level
 
 ---
 
-## 12. Citation for upstream DeepSeek Coder
+## 13. Citation for upstream DeepSeek Coder
 
 ```bibtex
 @misc{deepseek-coder,
@@ -247,7 +314,9 @@ RafCoder-specific additions focus on native runtime research, RAFAELOS low-level
 }
 ```
 
-## Instalação de ZIP da raiz
+---
+
+## 14. Instalação de ZIP da raiz
 
 Use o script abaixo para decodificar/descompactar automaticamente o único `.zip` presente na raiz do repositório e instalar no projeto:
 
@@ -261,8 +330,9 @@ Opcionalmente, informe um diretório de destino:
 ./scripts/install_root_zip.sh android/
 ```
 
+---
 
-## 11. Semantic pipeline 56x auditor
+## 15. Semantic pipeline 56x auditor
 
 A standalone semantic build auditor is available at `semantic_pipeline_56x_v3.sh` with source separated in `core.c`.
 
