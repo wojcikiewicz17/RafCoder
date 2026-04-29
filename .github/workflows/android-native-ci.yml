@@ -32,6 +32,36 @@ jobs:
         run: |
           ./scripts/android_build_matrix.sh
 
+      - name: Compute ABI outputs (debug/release)
+        id: abi_outputs
+        run: |
+          set -euo pipefail
+
+          DEBUG_LIB_ROOT="android/app/build/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib"
+          RELEASE_LIB_ROOT="android/app/build/intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib"
+
+          for abi in ${REQUIRED_ABIS}; do
+            debug_dir="${DEBUG_LIB_ROOT}/${abi}"
+            release_dir="${RELEASE_LIB_ROOT}/${abi}"
+
+            debug_has="false"
+            release_has="false"
+
+            if [[ -d "$debug_dir" ]] && find "$debug_dir" -maxdepth 1 -type f -name '*.so' -print -quit | grep -q .; then
+              debug_has="true"
+            fi
+
+            if [[ -d "$release_dir" ]] && find "$release_dir" -maxdepth 1 -type f -name '*.so' -print -quit | grep -q .; then
+              release_has="true"
+            fi
+
+            safe_abi="${abi//-/_}"
+            echo "debug_${safe_abi}_present=${debug_has}" >> "$GITHUB_OUTPUT"
+            echo "release_${safe_abi}_present=${release_has}" >> "$GITHUB_OUTPUT"
+            echo "debug_${safe_abi}_dir=${debug_dir}" >> "$GITHUB_OUTPUT"
+            echo "release_${safe_abi}_dir=${release_dir}" >> "$GITHUB_OUTPUT"
+          done
+
       - name: Validate native libs per ABI (debug/release)
         run: |
           set -euo pipefail
@@ -58,6 +88,13 @@ jobs:
 
           validate_variant debug "$DEBUG_LIB_ROOT"
           validate_variant release "$RELEASE_LIB_ROOT"
+
+          [[ "${{ steps.abi_outputs.outputs.debug_armeabi_v7a_present }}" == "true" ]] || { echo "Missing debug .so for armeabi-v7a"; exit 1; }
+          [[ "${{ steps.abi_outputs.outputs.debug_arm64_v8a_present }}" == "true" ]] || { echo "Missing debug .so for arm64-v8a"; exit 1; }
+          [[ "${{ steps.abi_outputs.outputs.release_armeabi_v7a_present }}" == "true" ]] || { echo "Missing release .so for armeabi-v7a"; exit 1; }
+          [[ "${{ steps.abi_outputs.outputs.release_arm64_v8a_present }}" == "true" ]] || { echo "Missing release .so for arm64-v8a"; exit 1; }
+
+          echo "ABI output flags validated successfully."
 
       - name: Stage unsigned APK artifacts by ABI
         run: |
