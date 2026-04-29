@@ -260,3 +260,23 @@ Opcionalmente, informe um diretório de destino:
 ```bash
 ./scripts/install_root_zip.sh android/
 ```
+
+
+## 11. Semantic pipeline 56x auditor
+
+A standalone semantic build auditor is available at `semantic_pipeline_56x_v3.sh` with source separated in `core.c`.
+
+It compiles a flag matrix, emits build artifacts to `build/`, evidences to `reports/`, and records:
+
+- binary size and SHA256;
+- ASM dump, per-function hashes and function-level assembly extracts;
+- libc/runtime dynamic dependency checks (`NEEDED`) and PLT call checks;
+- SIMD/FMA instruction detection by disassembly scan;
+- GCC optimization reports;
+- runtime measurement and real return code without masking failures.
+
+Run:
+
+```bash
+./semantic_pipeline_56x_v3.sh
+```
