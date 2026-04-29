@@ -11,6 +11,12 @@ endif
 ifeq ($(shell uname -m),aarch64)
 SRC += arch/aarch64/primitives.S
 endif
+ifeq ($(shell uname -m),armv7l)
+SRC += arch/armv7/primitives.S
+endif
+ifeq ($(shell uname -m),armv8l)
+SRC += arch/armv7/primitives.S
+endif
 
 OBJ = $(SRC:.c=.o)
 OBJ := $(OBJ:.S=.o)
@@ -18,6 +24,7 @@ OBJ := $(OBJ:.S=.o)
 all: libsector_core.a
 
 libsector_core.a: $(OBJ)
+	$(AR) rcs $@
 	$(AR) rcs $@ $(OBJ)
 
 %.o: %.c
@@ -32,6 +39,9 @@ test_reentrancy: test_sector_reentrancy.c $(SRC)
 test_snapshot: test_sector_snapshot.c $(SRC)
 	$(CC) -O2 -Wall -Wextra -Werror -std=c11 -I. test_sector_snapshot.c $(SRC) -o $@
 
+test_primitives_equivalence: test_primitives_equivalence.c $(SRC)
+	$(CC) -O2 -Wall -Wextra -Werror -std=c11 -I. test_primitives_equivalence.c $(SRC) -o $@
+
 benchmark_run_sector: benchmark_run_sector.c $(SRC)
 	$(CC) -O2 -Wall -Wextra -Werror -std=c11 -I. benchmark_run_sector.c $(SRC) -o $@
 
@@ -40,6 +50,6 @@ test_verb_seed: test_verb_seed.c $(SRC)
 	$(CC) -O2 -Wall -Wextra -Werror -std=c11 -I. test_verb_seed.c $(SRC) -o $@
 
 clean:
-	rm -f $(OBJ) libsector_core.a test_reentrancy test_snapshot test_verb_seed benchmark_run_sector
+	rm -f $(OBJ) libsector_core.a test_reentrancy test_snapshot test_primitives_equivalence test_verb_seed benchmark_run_sector
 
-.PHONY: all clean test_reentrancy test_snapshot test_verb_seed benchmark_run_sector
+.PHONY: all clean test_reentrancy test_snapshot test_primitives_equivalence test_verb_seed benchmark_run_sector
