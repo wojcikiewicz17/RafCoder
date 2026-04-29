@@ -28,6 +28,26 @@ jobs:
       - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v4
 
+
+      - name: Build deterministic core snapshot test (host-side)
+        run: |
+          set -euo pipefail
+          make -C core test_snapshot
+
+      - name: Run deterministic core snapshot test (host-side)
+        run: |
+          set -euo pipefail
+          mkdir -p core/test-logs
+          ./core/test_snapshot 2>&1 | tee core/test-logs/test_snapshot.log
+
+      - name: Upload deterministic core snapshot test log
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rafcoder-core-snapshot-test-log
+          path: core/test-logs/test_snapshot.log
+          if-no-files-found: error
+
       - name: Build unsigned binaries (debug + release)
         run: |
           ./scripts/android_build_matrix.sh
