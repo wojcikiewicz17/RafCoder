@@ -35,4 +35,9 @@ test_snapshot: test_sector_snapshot.c $(SRC)
 clean:
 	rm -f $(OBJ) libsector_core.a test_reentrancy test_snapshot
 
-.PHONY: all clean test_reentrancy test_snapshot
+
+test: test_reentrancy test_snapshot
+	./test_reentrancy
+	./test_snapshot
+
+.PHONY: all clean test test_reentrancy test_snapshot
