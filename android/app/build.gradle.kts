@@ -73,11 +73,11 @@ android {
                     throw GradleException("$message. Refusing to fallback to unsigned release.")
                 }
             } else {
-                logger.warn(
-                    "Release signing disabled: missing required env vars " +
-                        "(ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD). " +
-                        "Building explicit unsigned release artifact."
-                )
+                if (isExplicitUnsignedReleaseRequested) {
+                    logger.warn("Explicit unsigned release requested; proceeding without signing.")
+                } else {
+                    logger.warn("Release signing not configured; producing unsigned release artifact.")
+                }
                 signingConfig = null
             }
         }

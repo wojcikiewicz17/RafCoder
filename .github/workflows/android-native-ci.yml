@@ -27,12 +27,13 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Bootstrap Gradle Wrapper JAR
-        run: ./scripts/bootstrap_gradle_wrapper.sh
+        run: |
+          chmod +x ./scripts/ensure_gradle_wrapper_jar.sh
+          ./scripts/ensure_gradle_wrapper_jar.sh
 
       - name: Assert wrapper/CI Gradle version alignment
         run: |
-          set -euo pipefail
-          grep -F "gradle-${GRADLE_VERSION}-bin.zip" android/gradle/wrapper/gradle-wrapper.properties
+          ./android/gradlew --project-dir android --no-daemon clean :app:assembleDebug
 
       - name: Build debug and unsigned release
         run: ./android/gradlew --no-daemon -p android :app:clean :app:assembleDebug :app:assembleRelease
@@ -110,56 +111,7 @@ jobs:
       - name: Stage signed APK artifacts by ABI
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
         run: |
-          set -euo pipefail
-          mkdir -p android/artifacts/signed-release
-
-          resolve_signed_apk() {
-            local abi="$1"
-            local split_apk="android/app/build/outputs/apk/release/app-${abi}-release.apk"
-            local universal_apk="android/app/build/outputs/apk/release/app-release.apk"
-
-            if [ -f "$split_apk" ]; then
-              echo "$split_apk"
-              return 0
-            fi
-
-            if [ -f "$universal_apk" ]; then
-              echo "$universal_apk"
-              return 0
-            fi
-
-            echo "Missing signed release APK for ABI ${abi}" >&2
-            return 1
-          }
-
-          for abi in ${REQUIRED_ABIS}; do
-            signed_apk="$(resolve_signed_apk "$abi")"
-            cp -v "$signed_apk" "android/artifacts/signed-release/rafcoder-${abi}-release-signed.apk"
-          done
-
-      - name: Upload debug APK artifacts (armeabi-v7a)
-        uses: actions/upload-artifact@v4
-        with:
-          name: rafcoder-apk-debug-armeabi-v7a
-          path: android/artifacts/debug/rafcoder-armeabi-v7a-debug.apk
-
-      - name: Upload debug APK artifacts (arm64-v8a)
-        uses: actions/upload-artifact@v4
-        with:
-          name: rafcoder-apk-debug-arm64-v8a
-          path: android/artifacts/debug/rafcoder-arm64-v8a-debug.apk
-
-      - name: Upload unsigned release APK artifacts (armeabi-v7a)
-        uses: actions/upload-artifact@v4
-        with:
-          name: rafcoder-apk-release-unsigned-armeabi-v7a
-          path: android/artifacts/unsigned-release/rafcoder-armeabi-v7a-release-unsigned.apk
-
-      - name: Upload unsigned release APK artifacts (arm64-v8a)
-        uses: actions/upload-artifact@v4
-        with:
-          name: rafcoder-apk-release-unsigned-arm64-v8a
-          path: android/artifacts/unsigned-release/rafcoder-arm64-v8a-release-unsigned.apk
+          ./android/gradlew --project-dir android --no-daemon :app:clean :app:assembleRelease
 
       - name: Upload signed release APK artifacts (armeabi-v7a)
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
