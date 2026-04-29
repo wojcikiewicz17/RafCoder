@@ -8,10 +8,12 @@ val androidKeystorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PA
 val androidKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
 val androidKeyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull
 
-val hasCompleteSigningEnv = !androidKeystorePath.isNullOrBlank() &&
+val hasSigningEnv = !androidKeystorePath.isNullOrBlank() &&
     !androidKeystorePassword.isNullOrBlank() &&
     !androidKeyAlias.isNullOrBlank() &&
     !androidKeyPassword.isNullOrBlank()
+
+val hasValidKeystoreFile = hasSigningEnv && file(androidKeystorePath!!).exists()
 
 android {
     namespace = "com.rafcoder.app"
@@ -37,7 +39,7 @@ android {
 
     signingConfigs {
         create("release") {
-            if (hasCompleteSigningEnv) {
+            if (hasSigningEnv && hasValidKeystoreFile) {
                 storeFile = file(androidKeystorePath!!)
                 storePassword = androidKeystorePassword
                 keyAlias = androidKeyAlias
@@ -57,15 +59,24 @@ android {
                 "proguard-rules.pro"
             )
 
-            if (hasCompleteSigningEnv) {
-                signingConfig = signingConfigs.getByName("release")
-            } else {
-                logger.warn(
-                    "Release signing disabled: missing required env vars " +
-                        "(ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD). " +
-                        "Building explicit unsigned release artifact."
-                )
-                signingConfig = null
+            when {
+                hasSigningEnv && hasValidKeystoreFile -> {
+                    signingConfig = signingConfigs.getByName("release")
+                }
+                hasSigningEnv && !hasValidKeystoreFile -> {
+                    throw GradleException(
+                        "Release signed requested via signing env vars, but keystore file was not found at: " +
+                            androidKeystorePath
+                    )
+                }
+                else -> {
+                    logger.warn(
+                        "Release signing disabled: missing required env vars " +
+                            "(ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD). " +
+                            "Building explicit unsigned release artifact."
+                    )
+                    signingConfig = null
+                }
             }
         }
     }
