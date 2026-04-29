@@ -3,8 +3,15 @@
 ## Source of truth
 - Android project root: `android/`
 - Native core: `android/app/src/main/cpp/native-lib.cpp`
-- ABI targets: `armeabi-v7a`, `arm64-v8a`
+- ABI matrix oficial (Gradle `ndk.abiFilters` + CMake): `armeabi-v7a`, `arm64-v8a`
+- `x86_64` não é empacotado na trilha oficial (release/CI)
 - CI workflow: `.github/workflows/android-native-ci.yml`
+- Official build tool entrypoint: `android/gradlew` (`android/gradlew.bat` on Windows)
+
+## Artifact map (CI)
+- Debug unsigned APK: `android/artifacts/debug/` (artifact `rafcoder-apk-debug`)
+- Release unsigned APK: `android/artifacts/unsigned-release/` (artifact `rafcoder-apk-release-unsigned`)
+- Release signed APK: `android/artifacts/signed-release/` (artifact `rafcoder-apk-release-signed`, requires signing secrets)
 
 ## Local build
 Pré-requisito: usar o Gradle Wrapper oficial em `android/gradlew` e inicializar o bootstrap do wrapper jar.

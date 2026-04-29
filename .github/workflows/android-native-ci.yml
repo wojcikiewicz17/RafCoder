@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       JAVA_VERSION: '17'
+      REQUIRED_ABIS: 'armeabi-v7a arm64-v8a'
       HAS_SIGNING_SECRETS: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
     steps:
       - name: Checkout
@@ -28,21 +29,92 @@ jobs:
         run: |
           ./scripts/bootstrap_gradle_wrapper.sh
 
-      - name: Build unsigned debug
+            debug_has="false"
+            release_has="false"
+
+            if [[ -d "$debug_dir" ]] && find "$debug_dir" -maxdepth 1 -type f -name '*.so' -print -quit | grep -q .; then
+              debug_has="true"
+            fi
+
+            if [[ -d "$release_dir" ]] && find "$release_dir" -maxdepth 1 -type f -name '*.so' -print -quit | grep -q .; then
+              release_has="true"
+            fi
+
+            safe_abi="${abi//-/_}"
+            echo "debug_${safe_abi}_present=${debug_has}" >> "$GITHUB_OUTPUT"
+            echo "release_${safe_abi}_present=${release_has}" >> "$GITHUB_OUTPUT"
+            echo "debug_${safe_abi}_dir=${debug_dir}" >> "$GITHUB_OUTPUT"
+            echo "release_${safe_abi}_dir=${release_dir}" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Validate native libs per ABI (debug/release)
         run: |
           ./android/gradlew --no-daemon -p android :app:assembleDebug
 
-      - name: Stage unsigned APK artifacts
+            local abi
+            for abi in ${REQUIRED_ABIS}; do
+              local abi_dir="${root}/${abi}"
+              echo "Checking ${variant} ABI: ${abi}"
+              test -d "$abi_dir"
+              find "$abi_dir" -maxdepth 1 -type f -name '*.so' -print | sort
+              test -n "$(find "$abi_dir" -maxdepth 1 -type f -name '*.so' -print -quit)"
+            done
+          }
+
+          validate_variant debug "$DEBUG_LIB_ROOT"
+          validate_variant release "$RELEASE_LIB_ROOT"
+
+          [[ "${{ steps.abi_outputs.outputs.debug_armeabi_v7a_present }}" == "true" ]] || { echo "Missing debug .so for armeabi-v7a"; exit 1; }
+          [[ "${{ steps.abi_outputs.outputs.debug_arm64_v8a_present }}" == "true" ]] || { echo "Missing debug .so for arm64-v8a"; exit 1; }
+          [[ "${{ steps.abi_outputs.outputs.release_armeabi_v7a_present }}" == "true" ]] || { echo "Missing release .so for armeabi-v7a"; exit 1; }
+          [[ "${{ steps.abi_outputs.outputs.release_arm64_v8a_present }}" == "true" ]] || { echo "Missing release .so for arm64-v8a"; exit 1; }
+
+          echo "ABI output flags validated successfully."
+
+      - name: Stage unsigned APK artifacts by ABI
         run: |
-          mkdir -p android/artifacts/unsigned
-          cp -v android/app/build/outputs/apk/debug/*.apk android/artifacts/unsigned/
+          set -euo pipefail
+          mkdir -p android/artifacts/debug android/artifacts/unsigned-release
+
+          resolve_apk() {
+            local abi="$1"
+            local variant_dir="$2"
+            local output_name="$3"
+
+            local split_apk="android/app/build/outputs/apk/${variant_dir}/app-${abi}-${output_name}.apk"
+            local universal_apk="android/app/build/outputs/apk/${variant_dir}/app-${output_name}.apk"
+
+            if [ -f "$split_apk" ]; then
+              echo "$split_apk"
+              return 0
+            fi
+
+            if [ -f "$universal_apk" ]; then
+              echo "$universal_apk"
+              return 0
+            fi
+
+            echo "Missing APK for ABI ${abi} (${variant_dir}/${output_name})" >&2
+            return 1
+          }
+
+          for abi in ${REQUIRED_ABIS}; do
+            debug_apk="$(resolve_apk "$abi" debug debug)"
+            unsigned_release_apk="$(resolve_apk "$abi" release release-unsigned)"
+
+            cp -v "$debug_apk" "android/artifacts/debug/rafcoder-${abi}-debug.apk"
+            cp -v "$unsigned_release_apk" "android/artifacts/unsigned-release/rafcoder-${abi}-release-unsigned.apk"
+          done
+
+          ls -lah android/artifacts/debug
+          ls -lah android/artifacts/unsigned-release
 
       - name: Decode keystore
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/android/release.keystore
 
-      - name: Build signed release
+      - name: Build signed release binary
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
         env:
           ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/android/release.keystore
@@ -52,23 +124,73 @@ jobs:
         run: |
           ./android/gradlew --no-daemon -p android :app:clean :app:assembleRelease
 
-      - name: Stage signed APK artifacts
+      - name: Stage signed APK artifacts by ABI
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
         run: |
-          mkdir -p android/artifacts/signed
-          cp -v android/app/build/outputs/apk/release/*.apk android/artifacts/signed/
+          set -euo pipefail
+          mkdir -p android/artifacts/signed-release
 
-      - name: Upload unsigned APK artifacts
+          resolve_signed_apk() {
+            local abi="$1"
+            local split_apk="android/app/build/outputs/apk/release/app-${abi}-release.apk"
+            local universal_apk="android/app/build/outputs/apk/release/app-release.apk"
+
+            if [ -f "$split_apk" ]; then
+              echo "$split_apk"
+              return 0
+            fi
+
+            if [ -f "$universal_apk" ]; then
+              echo "$universal_apk"
+              return 0
+            fi
+
+            echo "Missing signed release APK for ABI ${abi}" >&2
+            return 1
+          }
+
+          for abi in ${REQUIRED_ABIS}; do
+            signed_apk="$(resolve_signed_apk "$abi")"
+            cp -v "$signed_apk" "android/artifacts/signed-release/rafcoder-${abi}-release-signed.apk"
+          done
+
+          test -z "$(find android/artifacts/signed-release -maxdepth 1 -type f -name '*-unsigned.apk' -print -quit)"
+          ls -lah android/artifacts/signed-release
+
+      - name: Upload debug APK artifacts (armeabi-v7a)
         uses: actions/upload-artifact@v4
         with:
-          name: rafcoder-android-apks-unsigned
-          path: |
-            android/artifacts/unsigned/*.apk
+          name: rafcoder-apk-debug-armeabi-v7a
+          path: android/artifacts/debug/rafcoder-armeabi-v7a-debug.apk
 
-      - name: Upload signed APK artifacts
+      - name: Upload debug APK artifacts (arm64-v8a)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rafcoder-apk-debug-arm64-v8a
+          path: android/artifacts/debug/rafcoder-arm64-v8a-debug.apk
+
+      - name: Upload unsigned release APK artifacts (armeabi-v7a)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rafcoder-apk-release-unsigned-armeabi-v7a
+          path: android/artifacts/unsigned-release/rafcoder-armeabi-v7a-release-unsigned.apk
+
+      - name: Upload unsigned release APK artifacts (arm64-v8a)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rafcoder-apk-release-unsigned-arm64-v8a
+          path: android/artifacts/unsigned-release/rafcoder-arm64-v8a-release-unsigned.apk
+
+      - name: Upload signed release APK artifacts (armeabi-v7a)
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: rafcoder-android-apks-signed
-          path: |
-            android/artifacts/signed/*.apk
+          name: rafcoder-apk-release-signed-armeabi-v7a
+          path: android/artifacts/signed-release/rafcoder-armeabi-v7a-release-signed.apk
+
+      - name: Upload signed release APK artifacts (arm64-v8a)
+        if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rafcoder-apk-release-signed-arm64-v8a
+          path: android/artifacts/signed-release/rafcoder-arm64-v8a-release-signed.apk

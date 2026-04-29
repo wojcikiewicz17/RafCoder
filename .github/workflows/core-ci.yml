@@ -1,0 +1,22 @@
+name: core-ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  core-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build core static library
+        run: make -C core all
+
+      - name: Run deterministic snapshot test
+        run: make -C core test_snapshot && ./core/test_snapshot
+
+      - name: Run reentrancy test
+        run: make -C core test_reentrancy && ./core/test_reentrancy
