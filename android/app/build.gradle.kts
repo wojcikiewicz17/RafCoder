@@ -12,6 +12,9 @@ val hasSigningEnv = !androidKeystorePath.isNullOrBlank() &&
     !androidKeystorePassword.isNullOrBlank() &&
     !androidKeyAlias.isNullOrBlank() &&
     !androidKeyPassword.isNullOrBlank()
+val hasValidKeystoreFile = !androidKeystorePath.isNullOrBlank() && file(androidKeystorePath).exists()
+val requestedTasks = gradle.startParameter.taskNames.map { it.lowercase() }
+val isExplicitUnsignedReleaseRequested = requestedTasks.any { it.contains("unsigned") }
 
 val hasValidKeystoreFile = !androidKeystorePath.isNullOrBlank() && file(androidKeystorePath).exists()
 
@@ -39,13 +42,7 @@ android {
 
     signingConfigs {
         create("release") {
-            if (hasSigningEnv) {
-                if (!hasValidKeystoreFile) {
-                    throw GradleException(
-                        "Release signed requested via signing env vars, but keystore file was not found at: " +
-                            androidKeystorePath
-                    )
-                }
+            if (hasSigningEnv && hasValidKeystoreFile) {
                 storeFile = file(androidKeystorePath!!)
                 storePassword = androidKeystorePassword
                 keyAlias = androidKeyAlias
@@ -65,24 +62,25 @@ android {
                 "proguard-rules.pro"
             )
 
-            when {
-                hasSigningEnv && hasValidKeystoreFile -> {
-                    signingConfig = signingConfigs.getByName("release")
-                }
-                hasSigningEnv && !hasValidKeystoreFile -> {
-                    throw GradleException(
-                        "Release signed requested via signing env vars, but keystore file was not found at: " +
-                            androidKeystorePath
-                    )
-                }
-                else -> {
-                    logger.warn(
-                        "Release signing disabled: missing required env vars " +
-                            "(ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD). " +
-                            "Building explicit unsigned release artifact."
-                    )
+            if (hasSigningEnv && hasValidKeystoreFile) {
+                signingConfig = signingConfigs.getByName("release")
+            } else if (hasSigningEnv && !hasValidKeystoreFile) {
+                val message =
+                    "Release signing requested via env, but keystore file was not found at ANDROID_KEYSTORE_PATH: " +
+                        androidKeystorePath
+                if (isExplicitUnsignedReleaseRequested) {
+                    logger.warn("$message. Building explicit unsigned release artifact as requested.")
                     signingConfig = null
+                } else {
+                    throw GradleException("$message. Refusing to fallback to unsigned release.")
                 }
+            } else {
+                logger.warn(
+                    "Release signing disabled: missing required env vars " +
+                        "(ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD). " +
+                        "Building explicit unsigned release artifact."
+                )
+                signingConfig = null
             }
         }
     }
