@@ -3,7 +3,7 @@ AR ?= ar
 CFLAGS ?= -O2 -Wall -Wextra -Werror -std=c11
 CFLAGS += -ffreestanding -nostdlib -fno-builtin -fno-stack-protector
 
-SRC = sector.c arch/primitives.c
+SRC = sector.c verb_seed.c arch/primitives.c
 
 ifeq ($(shell uname -m),x86_64)
 SRC += arch/x86_64/primitives.S
@@ -35,7 +35,11 @@ test_snapshot: test_sector_snapshot.c $(SRC)
 benchmark_run_sector: benchmark_run_sector.c $(SRC)
 	$(CC) -O2 -Wall -Wextra -Werror -std=c11 -I. benchmark_run_sector.c $(SRC) -o $@
 
-clean:
-	rm -f $(OBJ) libsector_core.a test_reentrancy test_snapshot benchmark_run_sector
 
-.PHONY: all clean test_reentrancy test_snapshot benchmark_run_sector
+test_verb_seed: test_verb_seed.c $(SRC)
+	$(CC) -O2 -Wall -Wextra -Werror -std=c11 -I. test_verb_seed.c $(SRC) -o $@
+
+clean:
+	rm -f $(OBJ) libsector_core.a test_reentrancy test_snapshot test_verb_seed benchmark_run_sector
+
+.PHONY: all clean test_reentrancy test_snapshot test_verb_seed benchmark_run_sector
