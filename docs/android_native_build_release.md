@@ -10,7 +10,7 @@
 - Gradle wrapper version: `8.14.3`
 - Wrapper JAR bootstrap: `scripts/ensure_gradle_wrapper_jar.sh` (não versiona binário no repositório)
 
-## Local build
+## Build local determinístico
 Pré-requisito: Java (JDK 17+) disponível no PATH local.
 
 ```bash
@@ -18,7 +18,24 @@ Pré-requisito: Java (JDK 17+) disponível no PATH local.
 ./scripts/android_build_matrix.sh
 ```
 
-Esse script chama `scripts/ensure_gradle_wrapper_jar.sh` e depois `android/gradlew` automaticamente.
+O fluxo local agora é dividido em fases explícitas e auditáveis:
+
+1. `build_unsigned_release()`
+   - Executa exatamente: `:app:clean :app:assembleDebug :app:assembleRelease`
+   - Não depende de variáveis de assinatura
+   - Valida ABIs de `debug` e `release`
+   - Coleta APKs em `artifacts/unsigned-release`
+
+2. `build_signed_release()`
+   - Só executa quando **todas** as variáveis abaixo estão presentes:
+     - `ANDROID_KEYSTORE_PATH`
+     - `ANDROID_KEYSTORE_PASSWORD`
+     - `ANDROID_KEY_ALIAS`
+     - `ANDROID_KEY_PASSWORD`
+   - Valida explicitamente existência de keystore em `ANDROID_KEYSTORE_PATH`
+   - Executa exatamente: `:app:clean :app:assembleRelease`
+   - Valida ABIs de `release` assinado
+   - Coleta APKs em `artifacts/signed-release`
 
 ## Signed release (local)
 Set variables before running build:
@@ -31,7 +48,7 @@ export ANDROID_KEY_PASSWORD='***'
 ./scripts/android_build_matrix.sh
 ```
 
-Esse script chama `scripts/ensure_gradle_wrapper_jar.sh` e depois `android/gradlew` automaticamente.
+Sem essas variáveis, o script mantém o build unsigned e **ignora** a fase signed.
 
 ## GitHub Actions secrets for signed release
 - `ANDROID_KEYSTORE_BASE64`
