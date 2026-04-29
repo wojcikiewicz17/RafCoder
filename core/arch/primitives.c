@@ -1,6 +1,6 @@
 #include "primitives.h"
 
-#if !defined(__x86_64__) && !defined(__aarch64__)
+#if !defined(__x86_64__) && !defined(__aarch64__) && !defined(__arm__)
 uint64_t core_xor_u64(uint64_t a, uint64_t b) {
     return a ^ b;
 }
