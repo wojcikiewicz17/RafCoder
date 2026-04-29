@@ -27,23 +27,17 @@ jobs:
       - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Bootstrap Gradle wrapper jar
-        run: |
-          mkdir -p android/gradle/wrapper
-          if [ ! -f android/gradle/wrapper/gradle-wrapper.jar ]; then
-            curl -fsSL https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradle/wrapper/gradle-wrapper.jar -o android/gradle/wrapper/gradle-wrapper.jar
-          fi
-
       - name: Build unsigned binaries (debug + release)
         run: |
-          ./android/gradlew -p android --no-daemon clean :app:assembleDebug :app:assembleRelease
+          ./scripts/android_build_matrix.sh
 
-      - name: Build unsigned release
+      - name: Stage unsigned APK artifacts
         run: |
-          mkdir -p android/artifacts/unsigned
-          cp -v android/app/build/outputs/apk/debug/*.apk android/artifacts/unsigned/
-          cp -v android/app/build/outputs/apk/release/*unsigned*.apk android/artifacts/unsigned/
-          ls -lah android/artifacts/unsigned
+          mkdir -p android/artifacts/debug android/artifacts/unsigned-release
+          cp -v android/app/build/outputs/apk/debug/*.apk android/artifacts/debug/
+          cp -v android/app/build/outputs/apk/release/*unsigned*.apk android/artifacts/unsigned-release/
+          ls -lah android/artifacts/debug
+          ls -lah android/artifacts/unsigned-release
 
       - name: Decode keystore
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
@@ -63,9 +57,16 @@ jobs:
       - name: Stage signed APK artifacts
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
         run: |
-          mkdir -p android/artifacts/signed
-          cp -v android/app/build/outputs/apk/release/*release*.apk android/artifacts/signed/
-          ls -lah android/artifacts/signed
+          mkdir -p android/artifacts/signed-release
+          cp -v android/app/build/outputs/apk/release/*release*.apk android/artifacts/signed-release/
+          ls -lah android/artifacts/signed-release
+
+      - name: Upload debug APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rafcoder-apk-debug
+          path: |
+            android/artifacts/debug/*.apk
 
       - name: Upload unsigned release APK artifacts
         uses: actions/upload-artifact@v4
