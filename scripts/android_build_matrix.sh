@@ -6,11 +6,15 @@ ANDROID_DIR="$ROOT_DIR/android"
 REQUIRED_ABIS=("armeabi-v7a" "arm64-v8a")
 DEBUG_JNI_LIBS_DIR="$ANDROID_DIR/app/build/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib"
 RELEASE_JNI_LIBS_DIR="$ANDROID_DIR/app/build/intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib"
-ARTIFACTS_DIR="$ROOT_DIR/artifacts"
-UNSIGNED_ARTIFACTS_DIR="$ARTIFACTS_DIR/unsigned-release"
-SIGNED_ARTIFACTS_DIR="$ARTIFACTS_DIR/signed-release"
+WRAPPER_JAR="$ANDROID_DIR/gradle/wrapper/gradle-wrapper.jar"
 
-"$ROOT_DIR/scripts/ensure_gradle_wrapper_jar.sh"
+cleanup_wrapper_jar() {
+  if [[ -f "$WRAPPER_JAR" ]]; then
+    rm -f "$WRAPPER_JAR"
+    echo "[INFO] Removed ephemeral Gradle wrapper jar: $WRAPPER_JAR"
+  fi
+}
+trap cleanup_wrapper_jar EXIT
 
 if [[ ! -x "$ANDROID_DIR/gradlew" ]]; then
   echo "[ERR] Gradle Wrapper não encontrado em $ANDROID_DIR/gradlew."
