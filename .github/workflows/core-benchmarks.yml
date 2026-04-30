@@ -123,8 +123,26 @@ jobs:
                   writer.writerow([f'binary_size_bytes.{name}', value])
           PY
 
+
+      - name: Build core contract package
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/core-contract
+          cp core/sector.h artifacts/core-contract/
+          mkdir -p artifacts/core-contract/core/arch
+          cp core/arch/primitives.h artifacts/core-contract/core/arch/
+          cp artifacts/core-benchmarks/metrics-summary.csv artifacts/core-contract/benchmark-summary.csv
+          cp artifacts/core-benchmarks/snapshot.txt artifacts/core-contract/snapshot.txt
+          cp artifacts/core-benchmarks/sha256sum.txt artifacts/core-contract/
+          cp LICENSE-CODE artifacts/core-contract/
+          if [ -f LICENSE-MODEL ]; then cp LICENSE-MODEL artifacts/core-contract/; fi
+          (cd artifacts/core-contract && sha256sum $(find . -type f | sed 's#^./##' | sort) > sha256sum.txt)
+          tar -czf artifacts/rafcoder-core-contract.tar.gz -C artifacts/core-contract .
+
       - name: Upload core benchmark artifacts
         uses: actions/upload-artifact@v4
         with:
           name: rafcoder-core-benchmarks
-          path: artifacts/core-benchmarks/
+          path: |
+            artifacts/core-benchmarks/
+            artifacts/rafcoder-core-contract.tar.gz
