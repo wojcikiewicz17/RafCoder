@@ -1,0 +1,130 @@
+name: core-benchmarks
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  metrics:
+    runs-on: ubuntu-latest
+    env:
+      BENCH_ITERATIONS: '1000'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build core and tests
+        run: |
+          set -euo pipefail
+          make -C core clean
+          make -C core all test_primitives_equivalence test_snapshot test_reentrancy benchmark_run_sector
+
+      - name: Generate benchmark and validation artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/core-benchmarks
+
+          ./core/test_primitives_equivalence | tee artifacts/core-benchmarks/primitives-equivalence.txt
+          ./core/test_snapshot | tee artifacts/core-benchmarks/snapshot.txt
+          ./core/test_reentrancy | tee artifacts/core-benchmarks/reentrancy.txt
+
+          ./core/benchmark_run_sector --iterations "${BENCH_ITERATIONS}" --format csv > artifacts/core-benchmarks/run-sector.csv
+          ./core/benchmark_run_sector --iterations "${BENCH_ITERATIONS}" --format json > artifacts/core-benchmarks/run-sector.json
+
+          sha256sum core/libsector_core.a core/benchmark_run_sector core/test_snapshot core/test_reentrancy core/test_primitives_equivalence \
+            > artifacts/core-benchmarks/sha256sum.txt
+
+          {
+            echo "artifact,bytes"
+            wc -c core/libsector_core.a | awk '{print "libsector_core.a,"$1}'
+            wc -c core/benchmark_run_sector | awk '{print "benchmark_run_sector,"$1}'
+            wc -c core/test_snapshot | awk '{print "test_snapshot,"$1}'
+            wc -c core/test_reentrancy | awk '{print "test_reentrancy,"$1}'
+            wc -c core/test_primitives_equivalence | awk '{print "test_primitives_equivalence,"$1}'
+          } > artifacts/core-benchmarks/binary-size.csv
+
+          {
+            echo "key,value"
+            echo "host_uname,$(uname -a | tr ',' ';')"
+            echo "host_arch,$(uname -m)"
+            echo "cc,$(${CC:-cc} --version | head -n1 | tr ',' ';')"
+            echo "cc_machine,$(${CC:-cc} -dumpmachine | tr ',' ';')"
+            echo "bench_iterations,${BENCH_ITERATIONS}"
+            echo "core_payload_size,32"
+            echo "core_output_words,8"
+            echo "official_android_abis,armeabi-v7a arm64-v8a"
+            echo "native_routes,c fallback x86_64 asm aarch64 asm armv7 asm"
+          } > artifacts/core-benchmarks/abi-build-metadata.csv
+
+          python3 - <<'PY'
+          import csv
+          import hashlib
+          import json
+          import pathlib
+          import statistics
+
+          root = pathlib.Path('artifacts/core-benchmarks')
+          samples = []
+          with (root / 'run-sector.csv').open(newline='', encoding='utf-8') as f:
+              for row in csv.DictReader(f):
+                  samples.append(int(row['elapsed_ns']))
+
+          sizes = {}
+          with (root / 'binary-size.csv').open(newline='', encoding='utf-8') as f:
+              for row in csv.DictReader(f):
+                  sizes[row['artifact']] = int(row['bytes'])
+
+          sha_lines = (root / 'sha256sum.txt').read_text(encoding='utf-8').splitlines()
+          sha256 = {}
+          for line in sha_lines:
+              digest, path = line.split(None, 1)
+              sha256[path] = digest
+
+          manifest = {
+              'schema': 'rafcoder.core.metrics.v1',
+              'benchmark': 'run_sector',
+              'iterations_per_run': 1000,
+              'sample_runs': len(samples),
+              'elapsed_ns': {
+                  'min': min(samples),
+                  'max': max(samples),
+                  'mean': statistics.fmean(samples),
+                  'median': statistics.median(samples),
+                  'per_iteration_mean': statistics.fmean(samples) / 1000.0,
+                  'per_iteration_median': statistics.median(samples) / 1000.0,
+              },
+              'binary_size_bytes': sizes,
+              'sha256': sha256,
+              'validation': {
+                  'primitive_equivalence': 'ok',
+                  'snapshot': 'ok',
+                  'reentrancy': 'ok',
+              },
+              'notes': [
+                  'Measurements are CI-host-relative and intended for regression tracking, not absolute device claims.',
+                  'ARM32/NEON device benchmarks require a dedicated Android runner or device farm.',
+              ],
+          }
+          (root / 'metrics-manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+
+          with (root / 'metrics-summary.csv').open('w', newline='', encoding='utf-8') as f:
+              writer = csv.writer(f)
+              writer.writerow(['metric', 'value'])
+              writer.writerow(['sample_runs', len(samples)])
+              writer.writerow(['elapsed_min_ns', min(samples)])
+              writer.writerow(['elapsed_max_ns', max(samples)])
+              writer.writerow(['elapsed_mean_ns', f'{statistics.fmean(samples):.2f}'])
+              writer.writerow(['elapsed_median_ns', f'{statistics.median(samples):.2f}'])
+              writer.writerow(['mean_ns_per_iteration', f'{statistics.fmean(samples) / 1000.0:.2f}'])
+              writer.writerow(['median_ns_per_iteration', f'{statistics.median(samples) / 1000.0:.2f}'])
+              for name, value in sizes.items():
+                  writer.writerow([f'binary_size_bytes.{name}', value])
+          PY
+
+      - name: Upload core benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rafcoder-core-benchmarks
+          path: artifacts/core-benchmarks/
