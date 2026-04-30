@@ -7,6 +7,9 @@ REQUIRED_ABIS=("armeabi-v7a" "arm64-v8a")
 DEBUG_JNI_LIBS_DIR="$ANDROID_DIR/app/build/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib"
 RELEASE_JNI_LIBS_DIR="$ANDROID_DIR/app/build/intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib"
 WRAPPER_JAR="$ANDROID_DIR/gradle/wrapper/gradle-wrapper.jar"
+DEBUG_ARTIFACTS_DIR="$ANDROID_DIR/artifacts/debug"
+UNSIGNED_ARTIFACTS_DIR="$ANDROID_DIR/artifacts/unsigned-release"
+SIGNED_ARTIFACTS_DIR="$ANDROID_DIR/artifacts/signed-release"
 
 cleanup_wrapper_jar() {
   if [[ -f "$WRAPPER_JAR" ]]; then
@@ -17,7 +20,7 @@ cleanup_wrapper_jar() {
 trap cleanup_wrapper_jar EXIT
 
 if [[ ! -x "$ANDROID_DIR/gradlew" ]]; then
-  echo "[ERR] Gradle Wrapper não encontrado em $ANDROID_DIR/gradlew."
+  echo "[ERR] Gradle Wrapper not found or not executable: $ANDROID_DIR/gradlew"
   exit 1
 fi
 
@@ -55,30 +58,68 @@ check_required_abis() {
   done
 }
 
-collect_apk_artifacts() {
-  local target_dir="$1"
-  shift
+resolve_apk() {
+  local abi="$1"
+  local variant_dir="$2"
+  local output_name="$3"
 
-  mkdir -p "$target_dir"
-  rm -f "$target_dir"/*.apk
+  local split_apk="$ANDROID_DIR/app/build/outputs/apk/${variant_dir}/app-${abi}-${output_name}.apk"
+  local universal_apk="$ANDROID_DIR/app/build/outputs/apk/${variant_dir}/app-${output_name}.apk"
 
-  local pattern
-  for pattern in "$@"; do
-    find "$ANDROID_DIR/app/build/outputs/apk" -type f -path "$pattern" -name '*.apk' -exec cp -f {} "$target_dir/" \;
+  if [[ -f "$split_apk" ]]; then
+    echo "$split_apk"
+    return 0
+  fi
+
+  if [[ -f "$universal_apk" ]]; then
+    echo "$universal_apk"
+    return 0
+  fi
+
+  echo "ERROR: Missing APK for ABI ${abi} (${variant_dir}/${output_name})" >&2
+  find "$ANDROID_DIR/app/build/outputs/apk" -type f -name '*.apk' -print | sort >&2 || true
+  return 1
+}
+
+stage_unsigned_artifacts() {
+  mkdir -p "$DEBUG_ARTIFACTS_DIR" "$UNSIGNED_ARTIFACTS_DIR"
+  rm -f "$DEBUG_ARTIFACTS_DIR"/*.apk "$UNSIGNED_ARTIFACTS_DIR"/*.apk "$ANDROID_DIR/artifacts/unsigned-apk-sha256sum.txt"
+
+  local abi
+  for abi in "${REQUIRED_ABIS[@]}"; do
+    local debug_apk
+    local unsigned_release_apk
+    debug_apk="$(resolve_apk "$abi" debug debug)"
+    unsigned_release_apk="$(resolve_apk "$abi" release release-unsigned)"
+
+    cp -v "$debug_apk" "$DEBUG_ARTIFACTS_DIR/rafcoder-${abi}-debug.apk"
+    cp -v "$unsigned_release_apk" "$UNSIGNED_ARTIFACTS_DIR/rafcoder-${abi}-release-unsigned.apk"
   done
 
-  echo "Artifacts em $target_dir:"
-  find "$target_dir" -maxdepth 1 -type f -name '*.apk' -print | sort
+  sha256sum "$DEBUG_ARTIFACTS_DIR"/*.apk "$UNSIGNED_ARTIFACTS_DIR"/*.apk > "$ANDROID_DIR/artifacts/unsigned-apk-sha256sum.txt"
+}
+
+stage_signed_artifacts() {
+  mkdir -p "$SIGNED_ARTIFACTS_DIR"
+  rm -f "$SIGNED_ARTIFACTS_DIR"/*.apk "$ANDROID_DIR/artifacts/signed-apk-sha256sum.txt"
+
+  local abi
+  for abi in "${REQUIRED_ABIS[@]}"; do
+    local signed_apk
+    signed_apk="$(resolve_apk "$abi" release release)"
+    cp -v "$signed_apk" "$SIGNED_ARTIFACTS_DIR/rafcoder-${abi}-release-signed.apk"
+  done
+
+  sha256sum "$SIGNED_ARTIFACTS_DIR"/*.apk > "$ANDROID_DIR/artifacts/signed-apk-sha256sum.txt"
 }
 
 build_unsigned_release() {
-  echo "[build_unsigned_release] Iniciando build deterministico unsigned (clean + debug + release)..."
+  echo "[build_unsigned_release] Starting deterministic unsigned build: clean + debug + release"
   "$ANDROID_DIR/gradlew" --project-dir "$ANDROID_DIR" --no-daemon :app:clean :app:assembleDebug :app:assembleRelease
 
   check_required_abis "$DEBUG_JNI_LIBS_DIR" "debug-unsigned"
   check_required_abis "$RELEASE_JNI_LIBS_DIR" "release-unsigned"
-
-  collect_apk_artifacts "$UNSIGNED_ARTIFACTS_DIR" "*/debug/*.apk" "*/release/*.apk"
+  stage_unsigned_artifacts
 }
 
 build_signed_release() {
@@ -92,22 +133,21 @@ build_signed_release() {
   local var
   for var in "${required_vars[@]}"; do
     if [[ -z "${!var:-}" ]]; then
-      echo "[build_signed_release] Variável obrigatória ausente: ${var}. Build assinado será ignorado."
+      echo "[build_signed_release] Missing optional signing variable: ${var}. Signed build skipped."
       return 0
     fi
   done
 
   if [[ ! -f "$ANDROID_KEYSTORE_PATH" ]]; then
-    echo "[build_signed_release] Keystore não encontrado em ANDROID_KEYSTORE_PATH: $ANDROID_KEYSTORE_PATH"
+    echo "ERROR: Signing store not found at configured path."
     return 1
   fi
 
-  echo "[build_signed_release] Iniciando build signed deterministico (clean + release)..."
+  echo "[build_signed_release] Starting deterministic signed build: clean + release"
   "$ANDROID_DIR/gradlew" --project-dir "$ANDROID_DIR" --no-daemon :app:clean :app:assembleRelease
 
   check_required_abis "$RELEASE_JNI_LIBS_DIR" "release-signed"
-
-  collect_apk_artifacts "$SIGNED_ARTIFACTS_DIR" "*/release/*.apk"
+  stage_signed_artifacts
 }
 
 build_unsigned_release
