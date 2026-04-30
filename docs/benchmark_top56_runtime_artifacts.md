@@ -1,6 +1,6 @@
 # Benchmark Top-56 Runtime Binary Artifacts
 
-This document describes the GitHub Actions workflow that builds the RAFAELOS/RafCoder sector runtime binary during CI execution, runs benchmark analysis, and publishes both the runtime package and specialized reports as workflow artifacts.
+This document describes the GitHub Actions workflow that builds the RAFAELOS/RafCoder sector runtime binary during CI execution, runs benchmark analysis, asserts deterministic snapshots, and publishes both runtime packages and specialized reports as workflow artifacts.
 
 ## Workflow
 
@@ -21,18 +21,31 @@ The workflow turns the native core into an auditable CI artifact pipeline:
 ```text
 push / pull_request / manual execution
   -> checkout repository
-  -> install native toolchain
+  -> install native toolchains
   -> generate benchmark harness
   -> compile runtime binary inside GitHub Actions
   -> execute benchmark matrix
+  -> assert deterministic snapshots per case
   -> run smoke test
   -> generate Top-56 report
   -> package runtime binary
   -> generate SHA256 checksum
+  -> generate Markdown and JSON manifests
   -> upload GitHub artifacts
 ```
 
 The binary is generated during the workflow runtime. It is not committed to the repository.
+
+## Compiler matrix
+
+The workflow currently runs the same benchmark artifact pipeline with:
+
+| Compiler | Artifact suffix |
+| --- | --- |
+| `gcc` | `gcc` |
+| `clang` | `clang` |
+
+The matrix is configured with `fail-fast: false`, so a failure in one compiler job does not hide the result of the other compiler job.
 
 ## Trigger modes
 
@@ -60,32 +73,56 @@ Manual runs support these inputs:
 | `samples` | `5` | Number of samples per iteration case. |
 | `cases` | `1,7,42,128,512,2048` | Comma-separated sector iteration cases. |
 
-## Runtime binary package
+## Runtime binary packages
 
-The workflow creates this package:
+The workflow creates one package per compiler:
 
 ```text
-rafcoder-sector-runtime-linux-x86_64.tar.gz
+rafcoder-sector-runtime-linux-x86_64-gcc.tar.gz
+rafcoder-sector-runtime-linux-x86_64-clang.tar.gz
 ```
 
-The package contains:
+Each package contains:
 
 ```text
-rafcoder-sector-runtime-linux-x86_64/
+rafcoder-sector-runtime-linux-x86_64-{compiler}/
   rafcoder-sector-runtime
   benchmark_sector_harness.c
   benchmark_top56.md
   benchmark_top56.json
+  benchmark_snapshots.json
   benchmark_matrix.csv
   build_stdout.txt
   build_stderr.txt
   ARTIFACT_MANIFEST.md
+  ARTIFACT_MANIFEST.json
   runtime_smoke_test.txt
+```
+
+## Deterministic snapshot assertions
+
+The benchmark generator executes repeated samples for each iteration case and computes a deterministic snapshot signature from:
+
+- checksum;
+- hash64;
+- CRC32;
+- coherence Q16;
+- entropy Q16;
+- last entropy score;
+- last invariant score;
+- compact output words.
+
+If repeated samples for the same iteration case diverge, the benchmark fails by default. This turns determinism from a claim into a CI assertion.
+
+Snapshot output:
+
+```text
+benchmark_snapshots.json
 ```
 
 ## Runtime smoke test
 
-Before upload, the workflow executes:
+Before upload, each generated runtime binary executes:
 
 ```bash
 rafcoder-sector-runtime 42 10
@@ -101,39 +138,43 @@ This proves that the generated runtime binary can execute inside the GitHub Acti
 
 ## Uploaded artifacts
 
-### 1. Benchmark report artifact
+### 1. Benchmark report artifacts
 
-Artifact name:
+Artifact names:
 
 ```text
-rafcoder-top56-benchmark-report
+rafcoder-top56-benchmark-report-gcc
+rafcoder-top56-benchmark-report-clang
 ```
 
-Contains:
+Each contains:
 
 ```text
 benchmark_top56.md
 benchmark_top56.json
+benchmark_snapshots.json
 benchmark_matrix.csv
 build_stdout.txt
 build_stderr.txt
 benchmark_sector_harness.c
 ```
 
-### 2. Runtime binary package artifact
+### 2. Runtime binary package artifacts
 
-Artifact name:
+Artifact names:
 
 ```text
-rafcoder-sector-runtime-linux-x86_64
+rafcoder-sector-runtime-linux-x86_64-gcc
+rafcoder-sector-runtime-linux-x86_64-clang
 ```
 
-Contains:
+Each contains:
 
 ```text
-rafcoder-sector-runtime-linux-x86_64.tar.gz
-rafcoder-sector-runtime-linux-x86_64.tar.gz.sha256
+rafcoder-sector-runtime-linux-x86_64-{compiler}.tar.gz
+rafcoder-sector-runtime-linux-x86_64-{compiler}.tar.gz.sha256
 ARTIFACT_MANIFEST.md
+ARTIFACT_MANIFEST.json
 runtime_smoke_test.txt
 ```
 
@@ -164,11 +205,11 @@ These metrics are CI-runner-relative. They are intended for regression tracking,
 
 ## Recommended next steps
 
-1. Add a second matrix job for `clang` in addition to `gcc`.
-2. Add a cross-compile package for ARM32 and ARM64 where toolchains are available.
-3. Add Python-vs-C-vs-ASM comparison artifacts.
-4. Add deterministic snapshot assertions for key iteration cases.
-5. Add historical benchmark comparison between commits.
+1. Add a cross-compile package for ARM32 and ARM64 where toolchains are available.
+2. Add Python-vs-C-vs-ASM comparison artifacts.
+3. Add historical benchmark comparison between commits.
+4. Add trend visualization from previous workflow artifacts.
+5. Add Android NDK benchmark jobs for `arm64-v8a` and `armeabi-v7a`.
 
 ## Engineering rule
 
