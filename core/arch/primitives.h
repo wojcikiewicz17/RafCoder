@@ -4,6 +4,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/*
+ * Primitive contract:
+ * - C fallback is canonical behavior.
+ * - x86_64, armv7 and aarch64 assembly backends must be behavior-equivalent.
+ * - ARM NEON vectorized path is intentionally TODO and must not be advertised
+ *   as implemented/performance-validated yet.
+ */
 uint64_t core_xor_u64(uint64_t a, uint64_t b);
 uint64_t core_mul_u64(uint64_t a, uint64_t b);
 uint64_t core_rotl_u64(uint64_t x, uint32_t shift);
