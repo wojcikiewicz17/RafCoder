@@ -32,8 +32,7 @@ jobs:
           ./scripts/ensure_gradle_wrapper_jar.sh
 
       - name: Assert wrapper/CI Gradle version alignment
-        run: |
-          ./android/gradlew --project-dir android --no-daemon clean :app:assembleDebug
+        run: ./android/gradlew --project-dir android --no-daemon clean :app:assembleDebug
 
       - name: Build debug and unsigned release
         run: ./android/gradlew --no-daemon -p android :app:clean :app:assembleDebug :app:assembleRelease
@@ -64,6 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p android/artifacts/debug android/artifacts/unsigned-release
+          rm -f android/artifacts/debug/*.apk android/artifacts/unsigned-release/*.apk
 
           resolve_apk() {
             local abi="$1"
@@ -84,6 +84,7 @@ jobs:
             fi
 
             echo "Missing APK for ABI ${abi} (${variant_dir}/${output_name})" >&2
+            find android/app/build/outputs/apk -type f -name '*.apk' -print | sort >&2 || true
             return 1
           }
 
@@ -94,6 +95,38 @@ jobs:
             cp -v "$debug_apk" "android/artifacts/debug/rafcoder-${abi}-debug.apk"
             cp -v "$unsigned_release_apk" "android/artifacts/unsigned-release/rafcoder-${abi}-release-unsigned.apk"
           done
+
+          sha256sum android/artifacts/debug/*.apk android/artifacts/unsigned-release/*.apk > android/artifacts/unsigned-apk-sha256sum.txt
+
+      - name: Upload debug APK artifacts (armeabi-v7a)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rafcoder-apk-debug-armeabi-v7a
+          path: android/artifacts/debug/rafcoder-armeabi-v7a-debug.apk
+
+      - name: Upload debug APK artifacts (arm64-v8a)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rafcoder-apk-debug-arm64-v8a
+          path: android/artifacts/debug/rafcoder-arm64-v8a-debug.apk
+
+      - name: Upload unsigned release APK artifacts (armeabi-v7a)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rafcoder-apk-release-unsigned-armeabi-v7a
+          path: android/artifacts/unsigned-release/rafcoder-armeabi-v7a-release-unsigned.apk
+
+      - name: Upload unsigned release APK artifacts (arm64-v8a)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rafcoder-apk-release-unsigned-arm64-v8a
+          path: android/artifacts/unsigned-release/rafcoder-arm64-v8a-release-unsigned.apk
+
+      - name: Upload unsigned APK checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: rafcoder-apk-unsigned-sha256sum
+          path: android/artifacts/unsigned-apk-sha256sum.txt
 
       - name: Decode keystore
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
@@ -111,7 +144,36 @@ jobs:
       - name: Stage signed APK artifacts by ABI
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
         run: |
-          ./android/gradlew --project-dir android --no-daemon :app:clean :app:assembleRelease
+          set -euo pipefail
+          mkdir -p android/artifacts/signed-release
+          rm -f android/artifacts/signed-release/*.apk
+
+          resolve_signed_apk() {
+            local abi="$1"
+            local split_apk="android/app/build/outputs/apk/release/app-${abi}-release.apk"
+            local universal_apk="android/app/build/outputs/apk/release/app-release.apk"
+
+            if [ -f "$split_apk" ]; then
+              echo "$split_apk"
+              return 0
+            fi
+
+            if [ -f "$universal_apk" ]; then
+              echo "$universal_apk"
+              return 0
+            fi
+
+            echo "Missing signed release APK for ABI ${abi}" >&2
+            find android/app/build/outputs/apk -type f -name '*.apk' -print | sort >&2 || true
+            return 1
+          }
+
+          for abi in ${REQUIRED_ABIS}; do
+            signed_apk="$(resolve_signed_apk "$abi")"
+            cp -v "$signed_apk" "android/artifacts/signed-release/rafcoder-${abi}-release-signed.apk"
+          done
+
+          sha256sum android/artifacts/signed-release/*.apk > android/artifacts/signed-apk-sha256sum.txt
 
       - name: Upload signed release APK artifacts (armeabi-v7a)
         if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
@@ -126,3 +188,10 @@ jobs:
         with:
           name: rafcoder-apk-release-signed-arm64-v8a
           path: android/artifacts/signed-release/rafcoder-arm64-v8a-release-signed.apk
+
+      - name: Upload signed APK checksums
+        if: ${{ env.HAS_SIGNING_SECRETS == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rafcoder-apk-signed-sha256sum
+          path: android/artifacts/signed-apk-sha256sum.txt
