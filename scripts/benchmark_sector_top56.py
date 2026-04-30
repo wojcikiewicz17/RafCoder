@@ -201,6 +201,18 @@ def size_sections(root: Path, binary: Path) -> Dict[str, int]:
     return result
 
 
+def arch_sources(root: Path) -> List[str]:
+    if platform.machine().lower() in {"x86_64", "amd64"}:
+        asm = root / "core/arch/x86_64/primitives.S"
+        if asm.exists():
+            return [str(asm)]
+    if platform.machine().lower() in {"aarch64", "arm64"}:
+        asm = root / "core/arch/aarch64/primitives.S"
+        if asm.exists():
+            return [str(asm)]
+    return ["core/arch/primitives.c"]
+
+
 def build_harness(root: Path, out_dir: Path, cc: str, cflags: List[str]) -> Path:
     harness = out_dir / "benchmark_sector_harness.c"
     harness.write_text(HARNESS_C, encoding="utf-8")
@@ -215,7 +227,7 @@ def build_harness(root: Path, out_dir: Path, cc: str, cflags: List[str]) -> Path
         *cflags,
         str(harness),
         "core/sector.c",
-        "core/arch/primitives.c",
+        *arch_sources(root),
         "-o",
         str(binary),
     ]
