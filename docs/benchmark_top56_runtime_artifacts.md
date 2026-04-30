@@ -82,6 +82,13 @@ rafcoder-sector-runtime-linux-x86_64-gcc.tar.gz
 rafcoder-sector-runtime-linux-x86_64-clang.tar.gz
 ```
 
+And matching checksum files with the exact same base names:
+
+```text
+rafcoder-sector-runtime-linux-x86_64-gcc.tar.gz.sha256
+rafcoder-sector-runtime-linux-x86_64-clang.tar.gz.sha256
+```
+
 Each package contains:
 
 ```text

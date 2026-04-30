@@ -92,30 +92,37 @@ jobs:
 
           FILE_DESC="$(file "dist/${PKG}/rafcoder-sector-runtime" || true)"
           BIN_SHA="$(sha256sum "dist/${PKG}/rafcoder-sector-runtime" | awk '{print $1}')"
+          export PKG FILE_DESC BIN_SHA
 
-          cat > "dist/${PKG}/ARTIFACT_MANIFEST.json" <<JSON
-          {
-            "schema": "rafcoder.runtime_artifact_manifest.v1",
-            "repository": "${{ github.repository }}",
-            "ref": "${{ github.ref }}",
-            "sha": "${{ github.sha }}",
-            "runner_os": "${{ runner.os }}",
-            "runner_arch": "${{ runner.arch }}",
-            "compiler": "${{ matrix.compiler }}",
-            "cc": "${{ matrix.cc }}",
-            "binary": "rafcoder-sector-runtime",
-            "binary_sha256": "${BIN_SHA}",
-            "binary_file_description": "${FILE_DESC}",
-            "reports": [
-              "benchmark_top56.md",
-              "benchmark_top56.json",
-              "benchmark_snapshots.json",
-              "benchmark_matrix.csv",
-              "build_stdout.txt",
-              "build_stderr.txt"
-            ]
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          pkg = Path("dist") / os.environ["PKG"]
+          payload = {
+              "schema": "rafcoder.runtime_artifact_manifest.v1",
+              "repository": os.environ["GH_REPOSITORY"],
+              "ref": os.environ["GH_REF"],
+              "sha": os.environ["GH_SHA"],
+              "runner_os": os.environ["RUNNER_OS_NAME"],
+              "runner_arch": os.environ["RUNNER_ARCH_NAME"],
+              "compiler": os.environ["MATRIX_COMPILER"],
+              "cc": os.environ["MATRIX_CC"],
+              "binary": "rafcoder-sector-runtime",
+              "binary_sha256": os.environ["BIN_SHA"],
+              "binary_file_description": os.environ["FILE_DESC"],
+              "reports": [
+                  "benchmark_top56.md",
+                  "benchmark_top56.json",
+                  "benchmark_snapshots.json",
+                  "benchmark_matrix.csv",
+                  "build_stdout.txt",
+                  "build_stderr.txt",
+              ],
           }
-          JSON
+          (pkg / "ARTIFACT_MANIFEST.json").write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+          PY
 
           {
             echo "# RafCoder runtime binary artifact"
@@ -143,6 +150,14 @@ jobs:
 
           tar -C dist -czf "${PKG}.tar.gz" "${PKG}"
           sha256sum "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
+        env:
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_REF: ${{ github.ref }}
+          GH_SHA: ${{ github.sha }}
+          RUNNER_OS_NAME: ${{ runner.os }}
+          RUNNER_ARCH_NAME: ${{ runner.arch }}
+          MATRIX_COMPILER: ${{ matrix.compiler }}
+          MATRIX_CC: ${{ matrix.cc }}
 
       - name: Smoke test packaged runtime binary
         run: |

@@ -199,6 +199,36 @@ Artifact contents include:
 
 CI measurements are runner-relative and intended for regression tracking, not universal hardware claims.
 
+### Top-56 runtime artifact workflow (GCC/Clang)
+
+Workflow:
+
+```text
+.github/workflows/benchmark-top56.yml
+```
+
+Current behavior:
+
+- triggers on `workflow_dispatch`, `push` to `main` and `pull_request` for `core/**`, `scripts/benchmark_sector_top56.py` and the workflow file itself;
+- runs a compiler matrix (`gcc`, `clang`) with `fail-fast: false`;
+- generates per-compiler benchmark artifact folders (`benchmark_artifacts_gcc`, `benchmark_artifacts_clang`);
+- enforces deterministic snapshot assertions by default (escape hatch: `--allow-nondeterminism`);
+- emits `benchmark_top56.md`, `benchmark_top56.json`, `benchmark_snapshots.json`, `benchmark_matrix.csv`, `build_stdout.txt`, `build_stderr.txt`, `benchmark_sector_harness.c`;
+- builds runtime packages `rafcoder-sector-runtime-linux-x86_64-gcc.tar.gz` and `rafcoder-sector-runtime-linux-x86_64-clang.tar.gz`;
+- emits SHA256 files with matching names (`.tar.gz.sha256`);
+- generates `ARTIFACT_MANIFEST.md` and `ARTIFACT_MANIFEST.json` for each runtime package;
+- runs a smoke test (`rafcoder-sector-runtime 42 10`) and stores output in `runtime_smoke_test.txt`;
+- uploads separate benchmark and runtime artifacts per compiler.
+
+Published artifact names:
+
+```text
+rafcoder-top56-benchmark-report-gcc
+rafcoder-top56-benchmark-report-clang
+rafcoder-sector-runtime-linux-x86_64-gcc
+rafcoder-sector-runtime-linux-x86_64-clang
+```
+
 ---
 
 ## 8. Python reference benchmark
