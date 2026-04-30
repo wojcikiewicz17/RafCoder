@@ -11,3 +11,10 @@ rafcoder-sector-runtime-linux-x86_64-*.tar.gz.sha256
 *.o
 *.core
 core.*
+
+# Local Android build outputs
+android/build/
+
+# Local native temporary binaries
+benchmark_sector
+*.out
